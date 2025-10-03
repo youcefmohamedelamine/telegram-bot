@@ -1,72 +1,152 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+import os
+from datetime import datetime
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LabeledPrice
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    PreCheckoutQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
-# 🔑 Bot token
-BOT_TOKEN2 = "7580086418:AAFRxYUb4bKHonLQge7jIpYF8SBRRPI9tjQ"
+# ============= إعدادات البوت =============
+BOT_TOKEN2 = "PUT-YOUR-BOT-TOKEN-HERE"
+OWNER_ID2 = 123456789  # ضع هنا ID المالك
 
-# 👑 Owner ID
-OWNER_ID2 = 5825048491  # change this to your Telegram ID
+PRODUCT_TITLE = "Buy Nothing"
+PRODUCT_DESCRIPTION = "Because those who own everything can afford to buy nothing."
+PAYLOAD = "buy_nothing"
+PROVIDER_TOKEN = ""  # فارغ لأنه Telegram Stars
+CURRENCY = "XTR"
 
-# Logging setup
+# الأسعار المتدرجة
+PRICES = [
+    LabeledPrice("Buy Nothing (10,000 Stars)", 10_000),
+    LabeledPrice("Buy Nothing (20,000 Stars)", 20_000),
+    LabeledPrice("Buy Nothing (30,000 Stars)", 30_000),
+    LabeledPrice("Buy Nothing (40,000 Stars)", 40_000),
+    LabeledPrice("Buy Nothing (50,000 Stars)", 50_000),
+    LabeledPrice("Buy Nothing (60,000 Stars)", 60_000),
+    LabeledPrice("Buy Nothing (70,000 Stars)", 70_000),
+    LabeledPrice("Buy Nothing (80,000 Stars)", 80_000),
+    LabeledPrice("Buy Nothing (90,000 Stars)", 90_000),
+    LabeledPrice("Buy Nothing (100,000 Stars)", 100_000),
+]
+
+# ============= إعداد اللوج =============
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
-# Start command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ============= الواجهة =============
+def main_menu():
     keyboard = [
-        [InlineKeyboardButton("Buy Nothing - 10,000⭐", callback_data="10000")],
-        [InlineKeyboardButton("Buy Nothing - 20,000⭐", callback_data="20000")],
-        [InlineKeyboardButton("Buy Nothing - 30,000⭐", callback_data="30000")],
-        [InlineKeyboardButton("Buy Nothing - 40,000⭐", callback_data="40000")],
-        [InlineKeyboardButton("Buy Nothing - 50,000⭐", callback_data="50000")],
-        [InlineKeyboardButton("Buy Nothing - 60,000⭐", callback_data="60000")],
-        [InlineKeyboardButton("Buy Nothing - 70,000⭐", callback_data="70000")],
-        [InlineKeyboardButton("Buy Nothing - 80,000⭐", callback_data="80000")],
-        [InlineKeyboardButton("Buy Nothing - 90,000⭐", callback_data="90000")],
-        [InlineKeyboardButton("Buy Nothing - 100,000⭐", callback_data="100000")],
+        [InlineKeyboardButton("💸 Buy Nothing", callback_data="buy_menu")],
+        [InlineKeyboardButton("ℹ️ Info", callback_data="info")],
+        [InlineKeyboardButton("📞 Contact", callback_data="contact")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(keyboard)
+
+# ============= الأوامر =============
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "✨ Welcome to the *Nothing Store* ✨\n\n"
-        "Here you can buy absolutely *Nothing*.\n"
-        "Because only those who own everything… can afford nothing.\n\n"
-        "Choose your Nothing package below:",
-        reply_markup=reply_markup
+        "👋 Welcome to the Nothing Shop!\n\n"
+        "Here, you can buy *nothing*... literally.\n"
+        "Only those who have everything can afford nothing.\n\n"
+        "Choose from the menu:",
+        reply_markup=main_menu()
     )
 
-# Handle button presses
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ============= الأزرار =============
+async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    price = query.data
-    user = query.from_user
+    if query.data == "buy_menu":
+        keyboard = [
+            [InlineKeyboardButton("💸 Buy Nothing", callback_data="buy")],
+            [InlineKeyboardButton("⬅️ Back", callback_data="back")]
+        ]
+        await query.edit_message_text(
+            "Choose how much nothing you want to buy:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
-    message = (
-        f"🎉 Congratulations {user.first_name}!\n\n"
-        f"You just bought *Nothing* for {price} Stars.\n"
-        "Remember: Only those who own everything can afford nothing. 🌀"
+    elif query.data == "info":
+        await query.edit_message_text(
+            "ℹ️ This is a philosophical shop.\n\n"
+            "You buy nothing, but in return you prove you own everything.",
+            reply_markup=main_menu()
+        )
+
+    elif query.data == "contact":
+        await query.edit_message_text(
+            "📞 Contact the creator:\n@YourSupportUsername",
+            reply_markup=main_menu()
+        )
+
+    elif query.data == "back":
+        await query.edit_message_text("👋 Welcome back!", reply_markup=main_menu())
+
+    elif query.data == "buy":
+        await context.bot.send_invoice(
+            chat_id=query.from_user.id,
+            title=PRODUCT_TITLE,
+            description=PRODUCT_DESCRIPTION,
+            payload=PAYLOAD,
+            provider_token=PROVIDER_TOKEN,
+            currency=CURRENCY,
+            prices=PRICES
+        )
+
+# ============= الدفع =============
+async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
+    if query.invoice_payload != PAYLOAD:
+        await query.answer(ok=False, error_message="Payment error!")
+    else:
+        await query.answer(ok=True)
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    amount = update.message.successful_payment.total_amount
+
+    # رسالة للمستخدم
+    await update.message.reply_text(
+        f"✅ Congratulations {user.first_name}!\n\n"
+        f"You have just bought *Nothing* for {amount} Stars.\n\n"
+        "Nothing is now officially yours. 🌀\n"
+        "Remember: only those who own everything can afford nothing."
     )
 
-    await query.edit_message_text(message)
-
-    # Notify owner (you)
+    # إشعار للمالك
     await context.bot.send_message(
         OWNER_ID2,
-        f"📩 User @{user.username or user.id} bought NOTHING for {price} Stars!"
+        f"📢 New purchase!\n"
+        f"User: {user.id} ({user.first_name})\n"
+        f"Bought Nothing for {amount} Stars."
     )
 
-# Main function
+# ============= تشغيل البوت =============
 def main():
     app = Application.builder().token(BOT_TOKEN2).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CallbackQueryHandler(menu_handler))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
 
-    print("🤖 Bot is running... (Nothing Store)")
+    logger.info("🚀 Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
