@@ -18,7 +18,7 @@ from telegram.ext import (
 )
 
 # ============= إعدادات البوت =============
-BOT_TOKEN2 = "PUT-YOUR-BOT-TOKEN-HERE"
+BOT_TOKEN2 = "7580086418:AAFRxYUb4bKHonLQge7jIpYF8SBRRPI9tjQ"
 OWNER_ID2 = 123456789  # ضع هنا ID المالك
 
 PRODUCT_TITLE = "Buy Nothing"
