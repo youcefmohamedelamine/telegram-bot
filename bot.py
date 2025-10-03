@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
 
 # ====== إعدادات - غيّرها ======
-TELEGRAM_TOKEN = "ضع_هنا_توكن_البوت"
+BOT_TOKEN = "ضع_هنا_توكن_البوت"
 OWNER_ID = 123456789   # رقمك في التليجرام كصاحب البوت
 PRICE_STARS = 100      # عدد النجوم المطلوبة
 LIKES_AMOUNT = 100     # عدد اللايكات
