@@ -23,9 +23,9 @@ from telegram.ext import (
 # 🚨 هام: يجب استبدال هذا التوكن بتوكن البوت الحقيقي 🚨
 BOT_TOKEN = "7580086418:AAFRxYUb4bKHonLQge7jIpYF8SBRRPI9tjQ" 
 ADMIN_ID = 5825048491 # ID حسابك الإداري (الإدمن)
-PRICE = 10 # 1000 نجمة (قيمة بالعملة الأصغر 1000 = 10 نجوم)
+PRICE = 1 # 1000 نجمة (قيمة بالعملة الأصغر 1000 = 10 نجوم)
 PRODUCT_TITLE = "100 لايك فري فاير"
-PRODUCT_DESCRIPTION = "شراء 100 لايك لفري فاير مقابل 10 نجمة"
+PRODUCT_DESCRIPTION = "شراء 100 لايك لفري فاير مقابل 1 نجمة"
 PAYLOAD = "freefire_likes"
 PROVIDER_TOKEN = ""  # فارغ لعملة النجوم (XTR)
 ORDERS_FILE = "orders.json"
@@ -66,7 +66,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("💎 شراء 100 لايك (1000 نجمة)", callback_data="buy")
         ]]
         await update.message.reply_text(
-            "أهلاً بك 👋\nيمكنك شراء 100 لايك لفري فاير مقابل 1000 نجمة.\n"
+            "أهلاً بك 👋\nيمكنك شراء 100 لايك لفري فاير مقابل 1 نجمة.\n"
             "لكل مستخدم عملية واحدة فقط في اليوم.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
