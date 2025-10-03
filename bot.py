@@ -63,7 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """الاستجابة لأمر /start وعرض زر الشراء."""
     try:
         keyboard = [[
-            InlineKeyboardButton("💎 شراء 100 لايك (1000 نجمة)", callback_data="buy")
+            InlineKeyboardButton("💎 شراء 100 لايك (1 نجمة)", callback_data="buy")
         ]]
         await update.message.reply_text(
             "أهلاً بك 👋\nيمكنك شراء 100 لايك لفري فاير مقابل 1 نجمة.\n"
