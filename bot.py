@@ -10,7 +10,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # الحصول على التوكن من المتغيرات البيئية
-TOKEN = os.environ.get('BOT_TOKEN')
+TOKEN = os.environ.get("BOT_TOKEN")
 
 # دالة الرد على أمر /start
 async def start(update, context):
@@ -60,7 +60,7 @@ def main():
     
     # بدء البوت
     logger.info('البوت بدأ العمل...')
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
