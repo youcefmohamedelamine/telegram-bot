@@ -18,24 +18,25 @@ from telegram.ext import (
     filters
 )
 
-# ============= Settings =============
+# ============= Settings ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")  # Keep as original
-PRICE = 1
+ADMIN_ID = os.getenv("ADMIN_ID")
+PROVIDER_TOKEN = os.getenv("PROVIDER_TOKEN")  # Telegram Stars provider token
+ORDERS_FILE = "orders.json"
+
+# Product info
 PRODUCT_TITLE = "Buy Nothing"
 PRODUCT_DESCRIPTION = "Buying literally nothing"
 PAYLOAD = "buy_nothing"
-PROVIDER_TOKEN = ""  # Keep as original
-ORDERS_FILE = "orders.json"
 
-# ============= Logging =============
+# ============= Logging ============
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ============= Load Orders =============
+# ============= Load Orders ============
 orders = {}
 try:
     if os.path.exists(ORDERS_FILE):
@@ -48,7 +49,7 @@ def save_orders():
     with open(ORDERS_FILE, "w") as f:
         json.dump(orders, f, indent=4)
 
-# ============= Main Menu =============
+# ============= Main Menu ============
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("💎 Buy Nothing", callback_data="buy_menu")],
@@ -57,7 +58,7 @@ def main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ============= Commands =============
+# ============= /start ============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome to the Nothing Shop!\n\n"
@@ -65,7 +66,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu()
     )
 
-# ============= Button Handler =============
+# ============= Button Handler ============
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
@@ -88,16 +89,16 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Select your Nothing price:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data in ["10000","20000","30000","40000","50000","60000","70000","80000","90000","100000"]:
-        await query.edit_message_text(
-            f"🎉 Congratulations {query.from_user.first_name}!\n"
-            f"You just bought *Nothing* for {query.data} Stars.\n"
-            "Only those who own everything can afford nothing. 🌀",
-            parse_mode="Markdown"
-        )
-        # Notify admin as in original
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"📢 User @{query.from_user.username or user_id} bought NOTHING for {query.data} Stars!"
+        amount = int(query.data)
+        prices = [LabeledPrice(PRODUCT_TITLE, amount)]
+        await context.bot.send_invoice(
+            chat_id=query.from_user.id,
+            title=PRODUCT_TITLE,
+            description=PRODUCT_DESCRIPTION,
+            payload=PAYLOAD,
+            provider_token=PROVIDER_TOKEN,
+            currency="XTR",
+            prices=prices
         )
 
     elif query.data == "my_info":
@@ -107,7 +108,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             msg = (f"📋 Last order:\n"
                    f"🕒 Time: {order.get('time','-')}\n"
-                   f"🎮 Free Fire ID: {order.get('freefire_id','❌ Not sent')}\n"
+                   f"💰 Amount: {order.get('amount','-')} Stars\n"
                    f"📌 Status: {order.get('status','Unknown')}")
         keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="back")]]
         await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -120,12 +121,48 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "back":
         await query.edit_message_text("👋 Welcome, choose from the menu:", reply_markup=main_menu())
 
-# ============= Running Bot =============
+# ============= Precheckout ============
+async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
+    if query.invoice_payload != PAYLOAD:
+        await query.answer(ok=False, error_message="Something went wrong with the payment")
+    else:
+        await query.answer(ok=True)
+
+# ============= Successful Payment ============
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    payment_info = update.message.successful_payment
+
+    # Save order
+    orders[user_id] = {
+        "time": datetime.now().isoformat(),
+        "amount": payment_info.total_amount,
+        "status": "completed"
+    }
+    save_orders()
+
+    # Send message to user
+    await update.message.reply_text(
+        f"🎉 Congratulations {update.message.from_user.first_name}!\n"
+        f"You just bought *Nothing* for {payment_info.total_amount} Stars.",
+        parse_mode="Markdown"
+    )
+
+    # Notify admin
+    await context.bot.send_message(
+        ADMIN_ID,
+        f"📢 User @{update.message.from_user.username or user_id} bought NOTHING for {payment_info.total_amount} Stars!"
+    )
+
+# ============= Run Bot ============
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(menu_handler))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
 
     logger.info("🚀 Bot is running...")
     app.run_polling()
