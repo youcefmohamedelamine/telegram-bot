@@ -1,8 +1,6 @@
-
 import logging
 import json
 import os
-import asyncio
 from datetime import datetime, timedelta
 from telegram import (
     Update,
@@ -22,12 +20,12 @@ from telegram.ext import (
 
 # ============= الإعدادات =============
 BOT_TOKEN = "ضع_توكن_البوت_هنا"
-ADMIN_ID = 5825048491  # ضع آيديك أنت
-PRICE = 1000  # السعر بالنجوم
+ADMIN_ID = 5825048491
+PRICE = 1000
 PRODUCT_TITLE = "100 لايك فري فاير"
 PRODUCT_DESCRIPTION = "شراء 100 لايك لفري فاير مقابل 1000 نجمة"
 PAYLOAD = "freefire_likes"
-PROVIDER_TOKEN = ""  # فارغ للـ Stars (ما تحتاج)
+PROVIDER_TOKEN = ""  # فارغ للـ Stars
 ORDERS_FILE = "orders.json"
 
 # ============= إعداد اللوج =============
@@ -36,7 +34,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# تحميل الطلبات
 if os.path.exists(ORDERS_FILE):
     with open(ORDERS_FILE, "r") as f:
         orders = json.load(f)
@@ -44,7 +41,6 @@ else:
     orders = {}
 
 # ============= الأوامر =============
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[
         InlineKeyboardButton("💎 شراء 100 لايك (1000 نجمة)", callback_data="buy")
@@ -59,7 +55,6 @@ async def buy_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
 
-    # تحقق من آخر عملية شراء
     if user_id in orders:
         last_time = datetime.fromisoformat(orders[user_id]["time"])
         if datetime.now() - last_time < timedelta(days=1):
@@ -73,10 +68,8 @@ async def buy_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description=PRODUCT_DESCRIPTION,
         payload=PAYLOAD,
         provider_token=PROVIDER_TOKEN,
-        currency="XTR",  # XTR = Telegram Stars
-        prices=prices,
-        need_name=False,
-        need_email=False
+        currency="XTR",
+        prices=prices
     )
     await query.answer()
 
@@ -94,21 +87,13 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "time": datetime.now().isoformat(),
         "freefire_id": None
     }
-
     with open(ORDERS_FILE, "w") as f:
         json.dump(orders, f, indent=4)
 
-    await update.message.reply_text(
-        "✅ تم الدفع بنجاح!\nأرسل الآن ID فري فاير الخاص بك."
-    )
-
-    # إعلام الأدمن
+    await update.message.reply_text("✅ تم الدفع بنجاح! أرسل الآن ID فري فاير الخاص بك.")
     await context.bot.send_message(
         ADMIN_ID,
-        f"💰 دفع جديد!\n"
-        f"المستخدم: @{username}\n"
-        f"التلغرام ID: {user_id}\n"
-        f"بانتظار ID فري فاير..."
+        f"💰 دفع جديد!\nالمستخدم: @{username}\nالتلغرام ID: {user_id}\nبانتظار ID فري فاير..."
     )
 
 async def save_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,22 +103,17 @@ async def save_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     freefire_id = update.message.text.strip()
     orders[user_id]["freefire_id"] = freefire_id
-
     with open(ORDERS_FILE, "w") as f:
         json.dump(orders, f, indent=4)
 
-    await update.message.reply_text("📌 تم تسجيل ID فري فاير، سيتم تنفيذ طلبك قريبا!")
-
-    # إعلام الأدمن
+    await update.message.reply_text("📌 تم تسجيل ID فري فاير، سيتم تنفيذ طلبك قريباً!")
     await context.bot.send_message(
         ADMIN_ID,
-        f"📩 طلب مكتمل:\n"
-        f"التلغرام ID: {user_id}\n"
-        f"ID فري فاير: {freefire_id}"
+        f"📩 طلب مكتمل:\nالتلغرام ID: {user_id}\nID فري فاير: {freefire_id}"
     )
 
 # ============= تشغيل البوت =============
-async def main():
+def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -142,12 +122,7 @@ async def main():
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, save_freefire_id))
 
-    await app.initialize()
-    await app.start()
-    print("✅ البوت شغال...")
-    await app.updater.start_polling()
-    await app.updater.idle()
+    app.run_polling()  # 🚀 هنا الحل بدل async معقدة
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    main()
