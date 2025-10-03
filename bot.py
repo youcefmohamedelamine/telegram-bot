@@ -20,8 +20,8 @@ from telegram.ext import (
 )
 
 # ============= الإعدادات =============
-BOT_TOKEN = "7580086418:AAFRxYUb4bKHonLQge7jIpYF8SBRRPI9tjQ"
-ADMIN_ID = 5825048491  # ID حسابك الإداري
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")    # ID حسابك الإداري
 PRICE = 1  # 1 نجمة (الوحدة الصغيرة XTR)
 PRODUCT_TITLE = "100 لايك فري فاير"
 PRODUCT_DESCRIPTION = "شراء 100 لايك لفري فاير مقابل 1 نجمة"
