@@ -1,7 +1,8 @@
-import logging
-import json
 import os
+import json
+import logging
 from datetime import datetime, timedelta
+from flask import Flask, render_template_string
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -21,38 +22,32 @@ from telegram.ext import (
 
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")    # ID حسابك الإداري
-PRICE = 1  # 1 نجمة (الوحدة الصغيرة XTR)
+ADMIN_ID = os.getenv("ADMIN_ID")
+PRICE = 1
 PRODUCT_TITLE = "100 لايك فري فاير"
 PRODUCT_DESCRIPTION = "شراء 100 لايك لفري فاير مقابل 1 نجمة"
 PAYLOAD = "freefire_likes"
-PROVIDER_TOKEN = ""  # فارغ لعملة النجوم
+PROVIDER_TOKEN = ""
 ORDERS_FILE = "orders.json"
 
-# ============= إعداد اللوج =============
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+# ============= اللوج =============
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ============= تحميل/تهيئة ملف الطلبات =============
+# ============= تحميل الطلبات =============
 orders = {}
 try:
     if os.path.exists(ORDERS_FILE):
         with open(ORDERS_FILE, "r") as f:
             orders = json.load(f)
-except json.JSONDecodeError:
+except:
     orders = {}
 
 def save_orders():
-    try:
-        with open(ORDERS_FILE, "w") as f:
-            json.dump(orders, f, indent=4)
-    except IOError as e:
-        logger.error(f"❌ فشل في حفظ الطلبات: {e}")
+    with open(ORDERS_FILE, "w") as f:
+        json.dump(orders, f, indent=4)
 
-# ============= الأوامر =============
+# ============= أوامر البوت =============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[
         InlineKeyboardButton("💎 شراء 100 لايك (1 نجمة)", callback_data="buy")
@@ -97,7 +92,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     username = update.message.from_user.username or "بدون_يوزر"
     payment_info = update.message.successful_payment
 
-    # حفظ الطلب
     orders[user_id] = {
         "time": datetime.now().isoformat(),
         "amount": payment_info.total_amount,
@@ -105,46 +99,69 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     }
     save_orders()
 
-    # طلب ID فري فاير من المستخدم
-    await update.message.reply_text(
-        "✅ تم الدفع بنجاح!\n\nمن فضلك أرسل الآن **ID حسابك في فري فاير ✍️**"
-    )
+    await update.message.reply_text("✅ تم الدفع! أرسل ID فري فاير الآن ✍️")
 
 async def collect_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     if user_id in orders and orders[user_id].get("status") == "waiting_id":
         freefire_id = update.message.text
-
-        # تحديث الطلب
         orders[user_id]["freefire_id"] = freefire_id
         orders[user_id]["status"] = "completed"
         save_orders()
 
-        await update.message.reply_text("👌 تم استلام ID الخاص بك، سيتم تنفيذ طلبك قريباً ✅")
-
-        # إشعار الإدمن
+        await update.message.reply_text("👌 تم استلام ID الخاص بك ✅")
         await context.bot.send_message(
             ADMIN_ID,
-            f"📢 طلب جديد مكتمل:\n"
-            f"👤 المستخدم: @{update.message.from_user.username or 'بدون_يوزر'}\n"
-            f"🆔 تيليجرام ID: {user_id}\n"
-            f"🎮 فري فاير ID: {freefire_id}\n"
-            f"💎 المنتج: {PRODUCT_TITLE}\n"
-            f"💰 المبلغ: {orders[user_id]['amount']} XTR\n"
+            f"📢 طلب جديد:\n👤 @{update.message.from_user.username or 'بدون'}\n🆔 {user_id}\n🎮 فري فاير ID: {freefire_id}\n💎 {PRODUCT_TITLE}"
         )
 
 # ============= تشغيل البوت =============
-def main():
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buy_button, pattern="^buy$"))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, collect_freefire_id))
-
-    logger.info("🚀 البوت يعمل الآن...")
+    logger.info("🚀 البوت يعمل...")
     app.run_polling()
 
+# ============= واجهة ويب =============
+web = Flask(__name__)
+
+HTML_PAGE = """
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شراء لايكات فري فاير</title>
+  <style>
+    body { margin:0; font-family:'Cairo',sans-serif; background:linear-gradient(135deg,#4e54c8,#8f94fb); color:white; text-align:center; }
+    .card { margin:100px auto; background:rgba(255,255,255,0.1); padding:30px; border-radius:20px; max-width:400px; box-shadow:0 8px 20px rgba(0,0,0,0.3); }
+    h1 { font-size:2rem; }
+    p { font-size:1.1rem; margin-bottom:20px; }
+    .btn { display:inline-block; padding:12px 25px; font-size:1.2rem; font-weight:bold; color:#4e54c8; background:white; border-radius:50px; text-decoration:none; }
+    .btn:hover { background:#eee; transform:scale(1.05); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>💎 شراء 100 لايك فري فاير</h1>
+    <p>ادفع عبر نجوم تليجرام واحصل على 100 لايك.</p>
+    <a href="https://t.me/YourBotUsername" class="btn">🚀 ابدأ الآن</a>
+  </div>
+</body>
+</html>
+"""
+
+@web.route("/")
+def home():
+    return render_template_string(HTML_PAGE)
+
 if __name__ == "__main__":
-    main()
+    import threading
+    # تشغيل البوت في ثريد منفصل
+    threading.Thread(target=run_bot).start()
+    # تشغيل الموقع
+    web.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
