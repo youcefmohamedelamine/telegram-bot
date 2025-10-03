@@ -19,7 +19,7 @@ from telegram.ext import (
 )
 
 # ============= الإعدادات =============
-BOT_TOKEN = "ضع_توكن_البوت_هنا"
+BOT_TOKEN = "BOT_TOKEN"
 ADMIN_ID = 5825048491
 PRICE = 1000
 PRODUCT_TITLE = "100 لايك فري فاير"
