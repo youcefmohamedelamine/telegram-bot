@@ -10,7 +10,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # الحصول على التوكن من المتغيرات البيئية
-TOKEN = os.environ.get('BOT_TOKEN')
+TOKEN = os.environ.get('7580086418:AAFRxYUb4bKHonLQge7jIpYF8SBRRPI9tjQ')
 
 # دالة الرد على أمر /start
 async def start(update, context):
