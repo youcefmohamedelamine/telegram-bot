@@ -17,7 +17,6 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-
 # ============= الإعدادات =============
 BOT_TOKEN = "ضع_توكن_البوت_هنا"
 ADMIN_ID = 5825048491  # ضع آيديك أنت
@@ -33,16 +32,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
-
 # تحميل الطلبات
 if os.path.exists(ORDERS_FILE):
     with open(ORDERS_FILE, "r") as f:
         orders = json.load(f)
 else:
     orders = {}
-
 # ============= الأوامر =============
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[
         InlineKeyboardButton("💎 شراء 100 لايك (1000 نجمة)", callback_data="buy")
@@ -52,11 +48,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "لكل مستخدم عملية واحدة فقط في اليوم.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 async def buy_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
-
     # تحقق من آخر عملية شراء
     if user_id in orders:
         last_time = datetime.fromisoformat(orders[user_id]["time"])
@@ -77,14 +71,12 @@ async def buy_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         need_email=False
     )
     await query.answer()
-
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     if query.invoice_payload != PAYLOAD:
         await query.answer(ok=False, error_message="خطأ في الدفع")
     else:
         await query.answer(ok=True)
-
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     username = update.message.from_user.username or "بدون_يوزر"
@@ -92,7 +84,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "time": datetime.now().isoformat(),
         "freefire_id": None
     }
-
     with open(ORDERS_FILE, "w") as f:
         json.dump(orders, f, indent=4)
 
@@ -108,12 +99,10 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"التلغرام ID: {user_id}\n"
         f"بانتظار ID فري فاير..."
     )
-
 async def save_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     if user_id not in orders or orders[user_id]["freefire_id"] is not None:
         return
-
     freefire_id = update.message.text.strip()
     orders[user_id]["freefire_id"] = freefire_id
 
@@ -129,19 +118,14 @@ async def save_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"التلغرام ID: {user_id}\n"
         f"ID فري فاير: {freefire_id}"
     )
-
 # ============= تشغيل البوت =============
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buy_button, pattern="^buy$"))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, save_freefire_id))
-
     app.run_polling()
-
 if __name__ == "__main__":
     main()
-```
