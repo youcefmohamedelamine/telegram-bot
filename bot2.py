@@ -4,10 +4,10 @@ from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQuer
 
 
 # 🔑 ضع التوكن هنا
-BOT_TOKEN2 = "ضع_توكن_البوت_هنا"
+BOT_TOKEN2 = os.getenv("BOT_TOKEN2")
 
 # 🧑‍💻 ضع رقم معرف المالك (Telegram ID)
-OWNER_ID2 = 5825048491   # مثال فقط غيره بمعرفك الحقيقي
+OWNER_ID2 =os.getenv("OWNER_ID2")
 
 # إعداد اللوغ
 logging.basicConfig(
