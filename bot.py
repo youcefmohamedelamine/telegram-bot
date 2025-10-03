@@ -1,7 +1,7 @@
 import os
-
 import json
 import logging
+import threading
 from datetime import datetime, timedelta
 from flask import Flask, render_template_string
 from telegram import (
@@ -9,7 +9,6 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     LabeledPrice,
-    error
 )
 from telegram.ext import (
     Application,
@@ -18,17 +17,17 @@ from telegram.ext import (
     CallbackQueryHandler,
     PreCheckoutQueryHandler,
     ContextTypes,
-    filters
+    filters,
 )
 
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
-PRICE = 1
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # لازم يكون رقم
+PRICE = 1  # السعر = نجمة واحدة
 PRODUCT_TITLE = "100 لايك فري فاير"
 PRODUCT_DESCRIPTION = "شراء 100 لايك لفري فاير مقابل 1 نجمة"
 PAYLOAD = "freefire_likes"
-PROVIDER_TOKEN = ""
+PROVIDER_TOKEN = ""  # لو عندك provider حطه هنا
 ORDERS_FILE = "orders.json"
 
 # ============= اللوج =============
@@ -111,10 +110,11 @@ async def collect_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_orders()
 
         await update.message.reply_text("👌 تم استلام ID الخاص بك ✅")
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"📢 طلب جديد:\n👤 @{update.message.from_user.username or 'بدون'}\n🆔 {user_id}\n🎮 فري فاير ID: {freefire_id}\n💎 {PRODUCT_TITLE}"
-        )
+        if ADMIN_ID != 0:
+            await context.bot.send_message(
+                ADMIN_ID,
+                f"📢 طلب جديد:\n👤 @{update.message.from_user.username or 'بدون'}\n🆔 {user_id}\n🎮 فري فاير ID: {freefire_id}\n💎 {PRODUCT_TITLE}"
+            )
 
 # ============= تشغيل البوت =============
 def run_bot():
@@ -161,7 +161,6 @@ def home():
     return render_template_string(HTML_PAGE)
 
 if __name__ == "__main__":
-    import threading
     # تشغيل البوت في ثريد منفصل
     threading.Thread(target=run_bot).start()
     # تشغيل الموقع
