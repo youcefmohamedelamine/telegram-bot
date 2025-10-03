@@ -1,19 +1,19 @@
-
 import sqlite3
 import time
+import os
 from datetime import datetime, timedelta
 from functools import wraps
 
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, Filters
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # ====== إعدادات - غيّرها ======
-BOT_TOKEN = "ضع_هنا_توكن_البوت"
-OWNER_ID = 123456789   # رقمك في التليجرام كصاحب البوت
-PRICE_STARS = 100      # عدد النجوم المطلوبة
-LIKES_AMOUNT = 100     # عدد اللايكات
-COOLDOWN_SECONDS = 24 * 3600  # كل 24 ساعة
-DB_PATH = "bot_db.sqlite3"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "ضع_هنا_توكن_البوت")
+OWNER_ID = int(os.environ.get("OWNER_ID", "123456789"))   # رقمك في التليجرام
+PRICE_STARS = int(os.environ.get("PRICE_STARS", "100"))      # عدد النجوم المطلوبة
+LIKES_AMOUNT = int(os.environ.get("LIKES_AMOUNT", "100"))    # عدد اللايكات
+COOLDOWN_SECONDS = int(os.environ.get("COOLDOWN_SECONDS", str(24 * 3600)))  # كل 24 ساعة
+DB_PATH = os.environ.get("DB_PATH", "bot_db.sqlite3")
 # ==============================
 
 # ---------- قاعدة البيانات ----------
@@ -81,26 +81,26 @@ def secs_to_human(secs):
 
 def owner_only(func):
     @wraps(func)
-    def wrapped(update: Update, context: CallbackContext, *args, **kwargs):
+    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         if update.effective_user and update.effective_user.id == OWNER_ID:
-            return func(update, context, *args, **kwargs)
+            return await func(update, context, *args, **kwargs)
         else:
-            update.message.reply_text("❌ هذا الأمر مخصص لصاحب البوت فقط.")
+            await update.message.reply_text("❌ هذا الأمر مخصص لصاحب البوت فقط.")
     return wrapped
 
 # ---------- أوامر ----------
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ensure_user(user.id, user.username)
-    update.message.reply_text(
+    await update.message.reply_text(
         f"مرحباً {user.first_name} 👋\n\n"
         f"يمكنك شراء {LIKES_AMOUNT} لايك مقابل {PRICE_STARS} نجمة.\n"
         f"للبدء استخدم الأمر /buy\n"
         f"رصيدك الحالي: /balance"
     )
 
-def help_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "📌 الأوامر المتاحة:\n"
         "/buy - شراء لايكات\n"
         "/balance - عرض رصيد النجوم\n"
@@ -108,7 +108,7 @@ def help_cmd(update: Update, context: CallbackContext):
         "💡 بعد الشراء سيُطلب منك كتابة ID لعبة Free Fire الخاص بك."
     )
 
-def balance(update: Update, context: CallbackContext):
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ensure_user(user.id, user.username)
     u = get_user(user.id)
@@ -118,11 +118,11 @@ def balance(update: Update, context: CallbackContext):
     now_ts = int(time.time())
     if next_allowed > now_ts:
         remaining = next_allowed - now_ts
-        update.message.reply_text(f"رصيدك: {u['stars']} ⭐\n⏳ الشراء متاح بعد: {secs_to_human(remaining)}")
+        await update.message.reply_text(f"رصيدك: {u['stars']} ⭐\n⏳ الشراء متاح بعد: {secs_to_human(remaining)}")
     else:
-        update.message.reply_text(f"رصيدك: {u['stars']} ⭐\n✅ يمكنك الشراء الآن.")
+        await update.message.reply_text(f"رصيدك: {u['stars']} ⭐\n✅ يمكنك الشراء الآن.")
 
-def buy(update: Update, context: CallbackContext):
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ensure_user(user.id, user.username)
     u = get_user(user.id)
@@ -131,12 +131,12 @@ def buy(update: Update, context: CallbackContext):
     # تحقق من الكولداون
     if u["last_purchase"] and (now_ts - u["last_purchase"] < COOLDOWN_SECONDS):
         remaining = COOLDOWN_SECONDS - (now_ts - u["last_purchase"])
-        update.message.reply_text(f"❌ يمكنك الشراء مرة كل 24 ساعة.\nتبقى: {secs_to_human(remaining)}")
+        await update.message.reply_text(f"❌ يمكنك الشراء مرة كل 24 ساعة.\nتبقى: {secs_to_human(remaining)}")
         return
 
     # تحقق من الرصيد
     if u["stars"] < PRICE_STARS:
-        update.message.reply_text(f"رصيدك غير كافٍ. تحتاج {PRICE_STARS} نجمة ولكن لديك {u['stars']} ⭐")
+        await update.message.reply_text(f"رصيدك غير كافٍ. تحتاج {PRICE_STARS} نجمة ولكن لديك {u['stars']} ⭐")
         return
 
     # خصم النجوم وإنشاء طلب معلق
@@ -150,12 +150,12 @@ def buy(update: Update, context: CallbackContext):
     conn.commit()
     conn.close()
 
-    update.message.reply_text(
+    await update.message.reply_text(
         f"✅ تم خصم {PRICE_STARS} نجمة من رصيدك.\n"
         f"💬 أرسل الآن ID لعبة Free Fire الخاص بك لكي أرسله لصاحب البوت."
     )
 
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text.strip()
 
@@ -171,10 +171,10 @@ def handle_message(update: Update, context: CallbackContext):
         conn.close()
 
         set_last_purchase(user.id, int(time.time()))
-        update.message.reply_text(f"🎉 تم استلام ID الخاص بك ({text}).\nسيقوم صاحب البوت بإضافة {amount} لايك قريباً.")
+        await update.message.reply_text(f"🎉 تم استلام ID الخاص بك ({text}).\nسيقوم صاحب البوت بإضافة {amount} لايك قريباً.")
 
         # إرسال إشعار لصاحب البوت
-        context.bot.send_message(
+        await context.bot.send_message(
             chat_id=OWNER_ID,
             text=(
                 f"💰 عملية شراء جديدة:\n\n"
@@ -187,45 +187,43 @@ def handle_message(update: Update, context: CallbackContext):
         )
     else:
         conn.close()
-        update.message.reply_text("📌 رسالتك تم استلامها. إذا أردت شراء لايكات استخدم /buy.")
+        await update.message.reply_text("📌 رسالتك تم استلامها. إذا أردت شراء لايكات استخدم /buy.")
 
 # ----- أمر إداري لإضافة نجوم -----
 @owner_only
-def add_stars(update: Update, context: CallbackContext):
+async def add_stars(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if len(args) != 2:
-        update.message.reply_text("استخدام: /addstars <user_id> <amount>")
+        await update.message.reply_text("استخدام: /addstars <user_id> <amount>")
         return
     try:
         target_id = int(args[0])
         amount = int(args[1])
     except ValueError:
-        update.message.reply_text("❌ القيم يجب أن تكون أرقام.")
+        await update.message.reply_text("❌ القيم يجب أن تكون أرقام.")
         return
 
     ensure_user(target_id, None)
     u = get_user(target_id)
     new_balance = u["stars"] + amount
     update_stars(target_id, new_balance)
-    update.message.reply_text(f"تمت إضافة {amount} ⭐ للمستخدم {target_id}. الرصيد الجديد: {new_balance} ⭐")
+    await update.message.reply_text(f"تمت إضافة {amount} ⭐ للمستخدم {target_id}. الرصيد الجديد: {new_balance} ⭐")
 
 # ---------- تشغيل البوت ----------
 def main():
     init_db()
-    updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    application = Application.builder().token(BOT_TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help_cmd))
-    dp.add_handler(CommandHandler("balance", balance))
-    dp.add_handler(CommandHandler("buy", buy))
-    dp.add_handler(CommandHandler("addstars", add_stars, pass_args=True))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_cmd))
+    application.add_handler(CommandHandler("balance", balance))
+    application.add_handler(CommandHandler("buy", buy))
+    application.add_handler(CommandHandler("addstars", add_stars))
 
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("🚀 البوت يعمل الآن...")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
