@@ -5,6 +5,7 @@ import sys
 import signal
 import asyncio
 from datetime import datetime
+from aiohttp import web
 
 # استيراد مكتبات قاعدة البيانات 
 import asyncpg
@@ -127,6 +128,46 @@ class OrderManager:
 
 order_manager = OrderManager()
 
+# ============= API Routes =============
+async def api_get_user_data(request):
+    """API endpoint للحصول على بيانات المستخدم"""
+    try:
+        user_id = request.query.get('userId')
+        
+        if not user_id:
+            return web.json_response(
+                {"error": "userId is required"},
+                status=400,
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
+        
+        data = await order_manager.get_user_data(user_id)
+        
+        logger.info(f"📊 API: بيانات المستخدم {user_id}")
+        
+        return web.json_response(
+            data,
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ API Error: {e}")
+        return web.json_response(
+            {"error": str(e)},
+            status=500,
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+async def api_options_handler(request):
+    """معالج CORS preflight"""
+    return web.Response(
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+        }
+    )
+
 # ============= دوال البوت ومعالجاته =============
 def get_rank(total):
     """الحصول على اللقب بناءً على إجمالي الإنفاق"""
@@ -190,7 +231,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             title=f"{product['emoji']} {product['name']}",
             description=f"✨ {product['desc']}",
             payload=payload,
-            provider_token="390000000:2922131602909477665",
+            provider_token="",
             currency="XTR",
             prices=[{'label': "السعر", 'amount': amount}],
             max_tip_amount=50000,
@@ -310,13 +351,22 @@ def main():
         logger.info(f"🌐 Webhook Mode")
         logger.info(f"📍 Webhook URL: {WEBHOOK_URL}")
         
+        # إضافة API routes إلى webhook server
+        async def setup_routes(application):
+            """إعداد routes للـ API"""
+            web_app = application.web_app
+            web_app.router.add_get(API_URL_PATH, api_get_user_data)
+            web_app.router.add_options(API_URL_PATH, api_options_handler)
+            logger.info(f"✅ API Routes مضافة على: {API_URL_PATH}")
+        
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
             url_path=BOT_TOKEN,
             webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
             drop_pending_updates=True,
-            allowed_updates=["message", "pre_checkout_query"]
+            allowed_updates=["message", "pre_checkout_query"],
+            ready=setup_routes
         )
     else:
         logger.info("📡 Polling Mode")
