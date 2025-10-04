@@ -2,6 +2,7 @@ import logging
 import json
 import os
 import sys
+import signal
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, WebAppInfo
 from telegram.ext import (
@@ -10,8 +11,7 @@ from telegram.ext import (
     ContextTypes,
     PreCheckoutQueryHandler,
     MessageHandler,
-    filters,
-    CallbackQueryHandler
+    filters
 )
 
 # ============= الإعدادات =============
@@ -84,7 +84,7 @@ class OrderManager:
             "category": category
         })
         self.save()
-        logger.info(f"تم إضافة طلب: {user_id} - {category} - {amount}")
+        logger.info(f"✅ طلب جديد: {user_id} - {category} - {amount}")
     
     def get_total(self, user_id):
         user_id = str(user_id)
@@ -97,20 +97,6 @@ class OrderManager:
         if user_id not in self.orders:
             return 0
         return len(self.orders[user_id])
-    
-    # ✅ إضافة: دالة للحصول على بيانات المستخدم
-    def get_user_data(self, user_id):
-        """إرجاع بيانات المستخدم بصيغة JSON"""
-        user_id = str(user_id)
-        total = self.get_total(user_id)
-        count = self.get_count(user_id)
-        rank = get_rank(total)
-        
-        return {
-            "totalSpent": total,
-            "orderCount": count,
-            "rank": rank
-        }
 
 order_manager = OrderManager()
 
@@ -128,7 +114,7 @@ def validate_price(category, amount):
 
 # ============= معالج /start =============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج أمر /start - عرض المتجر"""
+    """معالج أمر /start"""
     user = update.message.from_user
     user_id = user.id
     
@@ -136,7 +122,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = order_manager.get_count(user_id)
     rank = get_rank(total)
     
-    # ✅ الإصلاح: استخدم URL مباشر بدون ترميز
     keyboard = [[InlineKeyboardButton("🛍️ افتح المتجر", web_app=WebAppInfo(url=WEB_APP_URL))]]
     
     await update.message.reply_text(
@@ -148,74 +133,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"اضغط الزر للدخول إلى المتجر",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    logger.info(f"مستخدم دخل: {user.id} - {user.first_name}")
-
-# ✅ إضافة: معالج لإرسال بيانات المستخدم للـ Web App
-async def get_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    معالج لإرسال بيانات المستخدم
-    يُستخدم عبر رابط خاص أو command
-    """
-    user = update.message.from_user
-    user_data = order_manager.get_user_data(user.id)
-    
-    await update.message.reply_text(
-        f"📊 إحصائياتك:\n\n"
-        f"💰 الإنفاق: {user_data['totalSpent']:,} ⭐\n"
-        f"📦 الطلبات: {user_data['orderCount']}\n"
-        f"🏆 اللقب: {user_data['rank']}"
-    )
+    logger.info(f"👤 دخول: {user.id} - {user.first_name}")
 
 # ============= معالج البيانات من Web App =============
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    معالج البيانات القادمة من Web App
-    يستقبل JSON من tg.sendData() ويحوله لفاتورة دفع
-    """
+    """معالج البيانات من Web App"""
     try:
         user = update.message.from_user
         raw_data = update.message.web_app_data.data
         
-        logger.info(f"📥 استقبال web_app_data من: {user.id} (@{user.username or 'N/A'})")
-        logger.info(f"📄 البيانات: {raw_data}")
+        logger.info(f"📥 بيانات من: {user.id}")
         
         data = json.loads(raw_data)
         action = data.get('action')
         
         if action != 'buy':
-            logger.warning(f"⚠️ عملية غير معروفة: {action}")
             await update.message.reply_text("❌ عملية غير صحيحة")
             return
         
         category = data.get('category')
         amount = int(data.get('amount', 0))
         
-        logger.info(f"🛒 طلب شراء: {category} - {amount}")
-        
         if not validate_price(category, amount):
-            logger.error(f"❌ بيانات غير صالحة: {category} - {amount}")
-            await update.message.reply_text(
-                f"❌ البيانات غير صحيحة\n\n"
-                f"الفئة: {category}\n"
-                f"المبلغ: {amount:,} ⭐"
-            )
+            await update.message.reply_text(f"❌ بيانات غير صالحة: {category} - {amount:,} ⭐")
             return
         
         product = PRODUCTS[category]
-        timestamp = datetime.now().timestamp()
-        payload = f"order_{user.id}_{category}_{amount}_{timestamp}"
-        
-        description = (
-            f"✨ {product['desc']}\n\n"
-            f"🎁 ستحصل على:\n"
-            f"• ملكية حصرية للاشيء\n"
-            f"• ترقية اللقب التلقائية\n"
-            f"• دعم فني مميز"
-        )
+        payload = f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}"
         
         await update.message.reply_invoice(
             title=f"{product['emoji']} {product['name']}",
-            description=description,
+            description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
             payload=payload,
             provider_token="",
             currency="XTR",
@@ -224,24 +172,18 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             suggested_tip_amounts=[1000, 5000, 10000, 25000]
         )
         
-        logger.info(f"✅ فاتورة مُرسلة: {user.id} - {product['name']} - {amount:,} ⭐")
+        logger.info(f"📄 فاتورة: {product['name']} - {amount:,} ⭐")
         
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ خطأ JSON: {e}")
-        await update.message.reply_text("❌ خطأ في قراءة البيانات")
-    except ValueError as e:
-        logger.error(f"❌ خطأ في القيم: {e}")
-        await update.message.reply_text("❌ خطأ في معالجة المبلغ")
     except Exception as e:
-        logger.error(f"❌ خطأ غير متوقع: {e}", exc_info=True)
-        await update.message.reply_text("❌ حدث خطأ، يرجى المحاولة لاحقاً")
+        logger.error(f"❌ خطأ: {e}", exc_info=True)
+        await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
 
 # ============= معالج التحقق قبل الدفع =============
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """التحقق من الطلب قبل إتمام الدفع"""
+    """التحقق قبل الدفع"""
     query = update.pre_checkout_query
     await query.answer(ok=True)
-    logger.info(f"✅ تحقق من الدفع: {query.from_user.id}")
+    logger.info(f"✅ تحقق: {query.from_user.id}")
 
 # ============= معالج الدفع الناجح =============
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -260,7 +202,7 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # حفظ الطلب
     order_manager.add_order(user.id, payment.total_amount, category)
     
-    # حساب اللقب الجديد
+    # حساب اللقب
     total = order_manager.get_total(user.id)
     old_total = total - payment.total_amount
     old_rank = get_rank(old_total)
@@ -268,9 +210,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     rank_up = ""
     if old_rank != new_rank:
-        rank_up = f"\n\n🎊 ترقية اللقب!\n{old_rank} ➜ {new_rank}"
+        rank_up = f"\n\n🎊 ترقية!\n{old_rank} ➜ {new_rank}"
     
-    # رسالة التأكيد
     await update.message.reply_text(
         f"✅ تم الدفع بنجاح!\n\n"
         f"📦 {product['emoji']} {product['name']}\n"
@@ -280,7 +221,7 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"شكراً لك ❤️"
     )
     
-    logger.info(f"✅ دفع ناجح: {user.id} - {category} - {payment.total_amount}")
+    logger.info(f"💳 دفع ناجح: {user.id} - {payment.total_amount:,} ⭐")
     
     # إشعار الأدمن
     if ADMIN_ID:
@@ -288,37 +229,42 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(
                 ADMIN_ID,
                 f"📢 طلب جديد!\n\n"
-                f"👤 {user.first_name} (@{user.username or 'لا يوجد'})\n"
+                f"👤 {user.first_name}\n"
                 f"🆔 {user.id}\n"
-                f"📦 {product['emoji']} {product['name']}\n"
+                f"📦 {product['name']}\n"
                 f"💰 {payment.total_amount:,} ⭐\n"
-                f"🏷️ اللقب: {new_rank}\n"
-                f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"🏷️ {new_rank}"
             )
-        except Exception as e:
-            logger.error(f"خطأ إشعار الأدمن: {e}")
+        except:
+            pass
 
 # ============= معالج الأخطاء =============
 async def error_handler(update, context):
-    """معالج الأخطاء العام"""
-    logger.error(f"❌ خطأ: {context.error}", exc_info=context.error)
+    """معالج الأخطاء"""
+    logger.error(f"❌ خطأ: {context.error}")
     
     try:
         if update and update.effective_message:
-            await update.effective_message.reply_text(
-                "❌ حدث خطأ غير متوقع\nيرجى المحاولة مرة أخرى"
-            )
+            await update.effective_message.reply_text("❌ حدث خطأ")
     except:
         pass
 
 # ============= التهيئة =============
 async def post_init(application):
-    """دالة بعد تهيئة البوت"""
+    """بعد التهيئة"""
     bot = await application.bot.get_me()
-    logger.info(f"✅ البوت متصل: @{bot.username}")
-    logger.info(f"🆔 البوت ID: {bot.id}")
-    logger.info(f"📊 طلبات محفوظة: {len(order_manager.orders)}")
-    logger.info(f"🌐 Web App: {WEB_APP_URL}")
+    logger.info(f"✅ البوت: @{bot.username}")
+    logger.info(f"🆔 ID: {bot.id}")
+    logger.info(f"📊 طلبات: {len(order_manager.orders)}")
+    logger.info(f"🌐 WebApp: {WEB_APP_URL}")
+
+# ============= إيقاف آمن =============
+async def shutdown(application):
+    """إيقاف آمن للبوت"""
+    logger.info("🛑 جاري إيقاف البوت...")
+    await application.stop()
+    await application.shutdown()
+    logger.info("✅ تم الإيقاف بنجاح")
 
 # ============= التشغيل =============
 def main():
@@ -328,35 +274,77 @@ def main():
         logger.error("❌ BOT_TOKEN غير صحيح")
         sys.exit(1)
     
-    logger.info("🚀 جاري تشغيل البوت...")
+    logger.info("🚀 تشغيل البوت...")
     
+    # بناء التطبيق
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
     # المعالجات
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stats", get_user_stats))  # ✅ جديد
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    # التشغيل
+    # ✅ حذف أي webhook سابق قبل التشغيل
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    async def cleanup():
+        """تنظيف قبل البدء"""
+        try:
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("🧹 تم حذف Webhook السابق")
+            # انتظار 2 ثانية للتأكد
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.error(f"خطأ في التنظيف: {e}")
+    
+    loop.run_until_complete(cleanup())
+    
+    # اختيار وضع التشغيل
     if WEBHOOK_URL:
-        logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
+        logger.info(f"🌐 Webhook Mode")
+        logger.info(f"📍 {WEBHOOK_URL}")
+        
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
             url_path=BOT_TOKEN,
             webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            allowed_updates=["message", "pre_checkout_query"]
         )
     else:
-        logger.info("📡 Polling")
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(
-            app.bot.delete_webhook(drop_pending_updates=True)
-        )
-        app.run_polling(drop_pending_updates=True)
+        logger.info("📡 Polling Mode")
+        logger.info("✅ البوت يعمل...")
+        logger.info("⏹️ اضغط Ctrl+C للإيقاف")
+        
+        # ✅ معالج إيقاف نظيف
+        def signal_handler(sig, frame):
+            logger.info("🛑 إشارة إيقاف...")
+            loop.run_until_complete(shutdown(app))
+            sys.exit(0)
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        # تشغيل البوت
+        try:
+            app.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=["message", "pre_checkout_query"],
+                close_loop=False
+            )
+        except KeyboardInterrupt:
+            logger.info("🛑 توقف بواسطة المستخدم")
+            loop.run_until_complete(shutdown(app))
+        except Exception as e:
+            logger.error(f"❌ خطأ خطير: {e}")
+            loop.run_until_complete(shutdown(app))
+        finally:
+            loop.close()
 
 if __name__ == "__main__":
     main()
