@@ -31,16 +31,12 @@ PORT = int(os.getenv("PORT", 8080))
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
 # رابط الـ API الذي يستخدمه تطبيق الويب المصغر (WebApp) - لم يعد يُستخدم حاليًا
-API_URL_PATH = "/api" 
-
+API_URL_PATH = "/api"
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# ============= البيانات والمصفوفات =============
-
 PRODUCTS = {
     "small": {"name": "لاشيء صغير", "emoji": "🔹", "desc": "مثالي للمبتدئين"},
     "medium": {"name": "لاشيء متوسط", "emoji": "🔷", "desc": "الأكثر شعبية"},
