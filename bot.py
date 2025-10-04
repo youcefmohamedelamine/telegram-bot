@@ -1,12 +1,13 @@
 import logging
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    LabeledPrice
+    LabeledPrice,
+    WebAppInfo
 )
 from telegram.ext import (
     Application,
@@ -21,8 +22,11 @@ from telegram.ext import (
 # ============= Settings ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
-PROVIDER_TOKEN = os.getenv("PROVIDER_TOKEN")
+PROVIDER_TOKEN = ""  # فارغ للـ Telegram Stars
 ORDERS_FILE = "orders.json"
+
+# ضع رابط GitHub Pages هنا بعد النشر
+WEBAPP_URL = os.getenv("WEBAPP_URL")
 
 PRODUCT_TITLE = "Buy Nothing"
 PRODUCT_DESCRIPTION = "Buying literally nothing"
@@ -50,7 +54,6 @@ def save_orders():
 
 # ============= Title System ============
 def get_user_title(total_spent):
-    """Get user title based on total amount spent"""
     if total_spent >= 500000:
         return "👑 إمبراطور العدم"
     elif total_spent >= 300000:
@@ -69,7 +72,6 @@ def get_user_title(total_spent):
         return "🌱 زائر جديد"
 
 def get_total_spent(user_id):
-    """Calculate total amount spent by user"""
     user_orders = orders.get(user_id, {})
     if isinstance(user_orders, dict) and 'history' in user_orders:
         return sum(order.get('amount', 0) for order in user_orders['history'])
@@ -77,49 +79,56 @@ def get_total_spent(user_id):
         return user_orders.get('amount', 0)
     return 0
 
+def get_user_stats(user_id):
+    """Get user statistics"""
+    total_spent = get_total_spent(user_id)
+    user_data = orders.get(user_id, {})
+    history = user_data.get('history', [user_data] if user_data else [])
+    order_count = len(history) if history and history[0] else 0
+    rank = get_user_title(total_spent)
+    
+    return {
+        'totalSpent': total_spent,
+        'orderCount': order_count,
+        'rank': rank
+    }
+
 # ============= Product Categories ============
 PRODUCTS = {
     "small": {
         "name": "🔹 لاشيء صغير",
         "description": "حجم مثالي للمبتدئين",
-        "emoji": "🔹",
-        "prices": [
-            {"label": "5,000 ⭐", "amount": 5000},
-            {"label": "10,000 ⭐", "amount": 10000},
-            {"label": "15,000 ⭐", "amount": 15000}
-        ]
+        "emoji": "🔹"
     },
     "medium": {
         "name": "🔷 لاشيء متوسط",
         "description": "الخيار الأكثر شعبية",
-        "emoji": "🔷",
-        "prices": [
-            {"label": "20,000 ⭐", "amount": 20000},
-            {"label": "30,000 ⭐", "amount": 30000},
-            {"label": "40,000 ⭐", "amount": 40000}
-        ]
+        "emoji": "🔷"
     },
     "large": {
         "name": "💠 لاشيء كبير",
         "description": "للمحترفين فقط",
-        "emoji": "💠",
-        "prices": [
-            {"label": "50,000 ⭐", "amount": 50000},
-            {"label": "75,000 ⭐", "amount": 75000},
-            {"label": "100,000 ⭐", "amount": 100000}
-        ]
+        "emoji": "💠"
     }
 }
 
-# ============= Beautiful Main Menu ============
+# ============= Main Menu with Web App ============
 def main_menu(user_id=None):
     title = ""
+    webapp_url = WEBAPP_URL
+    
     if user_id:
         total = get_total_spent(user_id)
         title = get_user_title(total)
+        
+        # Encode user stats in URL for Web App
+        stats = get_user_stats(user_id)
+        import base64
+        stats_encoded = base64.b64encode(json.dumps(stats).encode()).decode()
+        webapp_url = f"{WEBAPP_URL}?data={stats_encoded}"
     
     keyboard = [
-        [InlineKeyboardButton("🛍️ تصفح المنتجات", callback_data="browse_products")],
+        [InlineKeyboardButton("🌟 افتح المتجر", web_app=WebAppInfo(url=webapp_url))],
         [
             InlineKeyboardButton("👤 حسابي", callback_data="my_info"),
             InlineKeyboardButton("🏆 لقبي", callback_data="my_rank")
@@ -130,12 +139,6 @@ def main_menu(user_id=None):
         ]
     ]
     return InlineKeyboardMarkup(keyboard), title
-
-# ============= Calculate Total Stats ============
-def get_stats():
-    total_orders = sum(len(user_data.get('history', [])) if isinstance(user_data, dict) and 'history' in user_data else 1 for user_data in orders.values())
-    total_revenue = sum(get_total_spent(user_id) for user_id in orders.keys())
-    return total_orders, total_revenue
 
 # ============= /start ============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,12 +155,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 مرحباً *{user_name}*! 👋
 {user_title}
 
-🎭 اختر من منتجاتنا الحصرية:
-🔹 *لاشيء صغير* - للمبتدئين
-🔷 *لاشيء متوسط* - الأكثر مبيعاً
-💠 *لاشيء كبير* - للمحترفين
+✨ *واجهة جديدة ومميزة!*
 
-💫 كل عملية شراء تقربك من لقب أعلى!
+اضغط على "🌟 افتح المتجر" لتجربة:
+• 🎨 تصميم عصري وجميل
+• 📊 إحصائيات تفاعلية
+• 🏆 نظام الألقاب المرئي
+• 🛍️ تصفح سهل وسريع
 
 ⬇️ اختر من القائمة:
 """
@@ -167,109 +171,45 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ============= Button Handler ============
+# ============= Handle Web App Data ============
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    user_name = update.message.from_user.first_name
+    
+    try:
+        data = json.loads(update.message.web_app_data.data)
+        
+        category = data.get('category')
+        amount = data.get('amount')
+        
+        if data.get('action') == 'purchase' and category and amount:
+            product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨", "description": "منتج حصري"})
+            prices = [LabeledPrice(f"{product['name']}", amount)]
+            
+            # Send invoice
+            await context.bot.send_invoice(
+                chat_id=update.message.chat_id,
+                title=f"{product['emoji']} {product['name']}",
+                description=f"✨ {product['description']} - {amount:,} نجمة",
+                payload=f"{PAYLOAD}_{category}_{amount}",
+                provider_token=PROVIDER_TOKEN,
+                currency="XTR",
+                prices=prices
+            )
+            
+            logger.info(f"Invoice sent to {user_name} ({user_id}): {product['name']} - {amount} stars")
+    
+    except Exception as e:
+        logger.error(f"Error handling web app data: {e}")
+        await update.message.reply_text("❌ حدث خطأ! حاول مرة أخرى.")
+
+# ============= Menu Handler (Buttons) ============
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
     await query.answer()
 
-    if query.data == "browse_products":
-        browse_message = """
-╭━━━━━━━━━━━━━━━━━━━╮
-┃  🛍️ تصفح المنتجات  ┃
-╰━━━━━━━━━━━━━━━━━━━╯
-
-اختر الفئة المناسبة لك:
-
-🔹 *لاشيء صغير*
-   └ مثالي للبداية
-   └ 5K - 15K ⭐
-
-🔷 *لاشيء متوسط*  
-   └ الأكثر شعبية
-   └ 20K - 40K ⭐
-
-💠 *لاشيء كبير*
-   └ للمحترفين فقط
-   └ 50K - 100K ⭐
-
-━━━━━━━━━━━━━━━━
-⬇️ اختر الفئة:
-"""
-        keyboard = [
-            [InlineKeyboardButton("🔹 لاشيء صغير", callback_data="cat_small")],
-            [InlineKeyboardButton("🔷 لاشيء متوسط", callback_data="cat_medium")],
-            [InlineKeyboardButton("💠 لاشيء كبير", callback_data="cat_large")],
-            [InlineKeyboardButton("« رجوع", callback_data="back")]
-        ]
-        await query.edit_message_text(
-            browse_message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-
-    elif query.data.startswith("cat_"):
-        category = query.data.replace("cat_", "")
-        product = PRODUCTS[category]
-        
-        category_message = f"""
-╭━━━━━━━━━━━━━━━━━━━╮
-┃  {product['emoji']} {product['name']}  ┃
-╰━━━━━━━━━━━━━━━━━━━╯
-
-📦 *الوصف:* {product['description']}
-
-✨ المميزات:
-  • جودة عالية من العدم
-  • تسليم فوري 100%
-  • ضمان اللاوجود
-  • دعم فني 24/7
-
-━━━━━━━━━━━━━━━━
-💰 اختر السعر المناسب:
-"""
-        keyboard = []
-        for price_option in product['prices']:
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{product['emoji']} {price_option['label']}",
-                    callback_data=f"buy_{category}_{price_option['amount']}"
-                )
-            ])
-        keyboard.append([InlineKeyboardButton("« رجوع للفئات", callback_data="browse_products")])
-        
-        await query.edit_message_text(
-            category_message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
-        )
-
-    elif query.data.startswith("buy_"):
-        parts = query.data.split("_")
-        category = parts[1]
-        amount = int(parts[2])
-        product = PRODUCTS[category]
-        
-        prices = [LabeledPrice(f"{product['name']}", amount)]
-        
-        await query.edit_message_text(
-            f"🎯 اخترت: *{product['name']}*\n"
-            f"💰 السعر: *{amount:,} ⭐*\n\n"
-            f"⏳ جاري تجهيز الفاتورة...",
-            parse_mode="Markdown"
-        )
-        
-        await context.bot.send_invoice(
-            chat_id=query.from_user.id,
-            title=f"{product['emoji']} {product['name']}",
-            description=f"✨ {product['description']} - {amount:,} نجمة",
-            payload=f"{PAYLOAD}_{category}_{amount}",
-            provider_token=PROVIDER_TOKEN,
-            currency="XTR",
-            prices=prices
-        )
-
-    elif query.data == "my_info":
+    if query.data == "my_info":
         total_spent = get_total_spent(user_id)
         user_title = get_user_title(total_spent)
         user_data = orders.get(user_id, {})
@@ -285,8 +225,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ❌ لم تقم بأي عملية شراء بعد
 
-🎁 ابدأ رحلتك في عالم اللاشيء!
-💫 اشترِ الآن واحصل على لقبك الأول
+🎁 افتح المتجر وابدأ رحلتك!
 """
         else:
             history = user_data.get('history', [user_data])
@@ -330,7 +269,6 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_spent = get_total_spent(user_id)
         current_title = get_user_title(total_spent)
         
-        # Calculate next rank
         ranks = [
             (10000, "🎯 مبتدئ اللاشيء"),
             (20000, "✨ تاجر العدم"),
@@ -387,7 +325,8 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "stats":
-        total_orders, total_revenue = get_stats()
+        total_orders = sum(len(user_data.get('history', [])) if isinstance(user_data, dict) and 'history' in user_data else 1 for user_data in orders.values())
+        total_revenue = sum(get_total_spent(uid) for uid in orders.keys())
         
         stats_message = f"""
 ╭━━━━━━━━━━━━━━━━╮
@@ -469,12 +408,10 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_name = update.message.from_user.first_name
     payment_info = update.message.successful_payment
     
-    # Parse payload to get category
     payload_parts = payment_info.invoice_payload.split("_")
     category = payload_parts[2] if len(payload_parts) > 2 else "unknown"
-    product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨"})
+    product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨", "description": "منتج حصري"})
 
-    # Create order record
     new_order = {
         "time": datetime.now().isoformat(),
         "amount": payment_info.total_amount,
@@ -484,10 +421,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "product": product['name']
     }
 
-    # Save order with history
     if user_id in orders:
         if 'history' not in orders[user_id]:
-            # Convert old format to new format
             old_order = orders[user_id].copy()
             orders[user_id] = {'history': [old_order, new_order]}
         else:
@@ -497,7 +432,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     save_orders()
 
-    # Calculate new title
     total_spent = get_total_spent(user_id)
     old_total = total_spent - payment_info.total_amount
     old_title = get_user_title(old_total)
@@ -507,7 +441,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if old_title != new_title:
         rank_up_msg = f"\n\n🎊 *تهانينا! ترقية اللقب!*\n{old_title} ➜ {new_title}"
 
-    # Beautiful success message
     success_message = f"""
 ╔══════════════════════╗
 ║   🎉 تهانينا! 🎉   ║
@@ -542,8 +475,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=menu_markup
     )
 
-    # Notify admin
-    total_orders, total_revenue = get_stats()
+    total_orders = sum(len(user_data.get('history', [])) if isinstance(user_data, dict) and 'history' in user_data else 1 for user_data in orders.values())
+    total_revenue = sum(get_total_spent(uid) for uid in orders.keys())
     admin_notification = f"""
 ╔══════════════════════╗
 ║   📢 طلب جديد!   ║
@@ -572,11 +505,13 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     app.add_handler(CallbackQueryHandler(menu_handler))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
 
-    logger.info("🚀 Bot is running with products scroll view and rank system...")
+    logger.info("🚀 Bot is running with Web App interface (No Flask needed)...")
+    logger.info(f"📱 Web App URL: {WEBAPP_URL}")
     app.run_polling()
 
 if __name__ == "__main__":
