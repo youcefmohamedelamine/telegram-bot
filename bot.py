@@ -825,16 +825,6 @@ def validate_config() -> bool:
     
     return True
 
-async def clear_webhook():
-    """حذف webhook قبل بدء polling"""
-    try:
-        from telegram import Bot
-        bot = Bot(token=BOT_TOKEN)
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ تم حذف webhook والتحديثات المعلقة")
-    except Exception as e:
-        logger.warning(f"⚠️ خطأ في حذف webhook: {e}")
-
 def main():
     """دالة التشغيل الرئيسية المحصنة"""
     try:
@@ -844,12 +834,6 @@ def main():
             sys.exit(1)
         
         logger.info("🔧 إنشاء التطبيق...")
-        
-        # حذف webhook قبل البدء
-        try:
-            asyncio.run(clear_webhook())
-        except Exception as e:
-            logger.warning(f"⚠️ لم يتم حذف webhook: {e}")
         
         # إنشاء التطبيق مع إعدادات محسنة
         app = Application.builder()\
