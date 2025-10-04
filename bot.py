@@ -342,15 +342,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         product = PRODUCTS[category]
                         prices = [LabeledPrice(product["name"], amount)]
                         
-                        await update.message.reply_invoice(
-                            title=f"{product['emoji']} {product['name']}",
-                            description=f"{product['desc']}\n💰 السعر: {amount:,} نجمة ⭐",
-                            payload=f"order_{user_id}_{category}_{amount}_{datetime.now().timestamp()}",
-                            provider_token=PROVIDER_TOKEN,
-                            currency="XTR",
-                            prices=prices
-                        )
-                        return
+                        # إرسال الفاتورة مباشرة
+                        try:
+                            await update.message.reply_invoice(
+                                title=f"{product['emoji']} {product['name']}",
+                                description=f"{product['desc']}\n💰 السعر: {amount:,} نجمة ⭐",
+                                payload=f"order_{user_id}_{category}_{amount}_{datetime.now().timestamp()}",
+                                provider_token=PROVIDER_TOKEN,
+                                currency="XTR",
+                                prices=prices,
+                                need_name=False,
+                                need_phone_number=False,
+                                need_email=False,
+                                need_shipping_address=False,
+                                is_flexible=False
+                            )
+                            logger.info(f"✅ تم إرسال فاتورة: {category} - {amount}")
+                            return
+                        except Exception as invoice_error:
+                            logger.error(f"❌ خطأ في إرسال الفاتورة: {invoice_error}")
+                            await safe_reply(update, "❌ خطأ في إنشاء الفاتورة. تأكد من تفعيل Telegram Stars في إعدادات البوت")
+                            return
+                            
             except ValueError as e:
                 logger.error(f"❌ خطأ في معالجة المبلغ: {e}")
                 await safe_reply(update, "❌ حدث خطأ في إنشاء الفاتورة")
