@@ -483,6 +483,410 @@
             }
         }
         
+        // ============= تحميل بيانات المستخدم =============
+        function loadUserData() {
+            try {
+                if (!tg) {
+                    console.error('Telegram not initialized');
+                    updateUserInterface({
+                        totalSpent: 0,
+                        orderCount: 0,
+                        rank: '🌱 زائر جديد'
+                    });
+                    return;
+                }
+                
+                // الحصول على بيانات المستخدم
+                const user = tg.initDataUnsafe?.user;
+                if (user && user.first_name) {
+                    safeSetText('userName', user.first_name);
+                }
+                
+                // محاولة تحميل البيانات من start_param
+                try {
+                    const startParam = tg.initDataUnsafe?.start_param;
+                    if (startParam && startParam.length > 0) {
+                        const data = JSON.parse(atob(startParam));
+                        
+                        // التحقق من صحة البيانات
+                        if (data && typeof data === 'object') {
+                            updateUserInterface(data);
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.log('Error parsing start param:', e);
+                }
+                
+                // البيانات الافتراضية
+                updateUserInterface({
+                    totalSpent: 0,
+                    orderCount: 0,
+                    rank: '🌱 زائر جديد'
+                });
+                
+            } catch (e) {
+                console.error('Error loading user data:', e);
+                showError('❌ خطأ في تحميل البيانات');
+                
+                // البيانات الافتراضية في حالة الخطأ
+                updateUserInterface({
+                    totalSpent: 0,
+                    orderCount: 0,
+                    rank: '🌱 زائر جديد'
+                });
+            }
+        }
+        
+        // ============= تحديث واجهة المستخدم =============
+        function updateUserInterface(data) {
+            try {
+                // التحقق من صحة البيانات
+                if (!data || typeof data !== 'object') {
+                    console.error('Invalid data object');
+                    return;
+                }
+                
+                const totalSpent = parseInt(data.totalSpent) || 0;
+                const orderCount = parseInt(data.orderCount) || 0;
+                
+                // تحديث الإحصائيات
+                safeSetText('totalSpent', formatNumber(totalSpent));
+                safeSetText('orderCount', formatNumber(orderCount));
+                
+                // تحديث الرتبة
+                const rank = getUserTitle(totalSpent);
+                safeSetText('userRank', rank);
+                
+                // تحديث شريط التقدم
+                updateProgressBar(totalSpent);
+                
+            } catch (e) {
+                console.error('Error updating user interface:', e);
+                showError('❌ خطأ في تحديث الواجهة');
+            }
+        }
+        
+        // ============= تحديث شريط التقدم =============
+        function updateProgressBar(totalSpent) {
+            try {
+                const spent = parseInt(totalSpent) || 0;
+                let nextRank = null;
+                
+                // البحث عن الرتبة القادمة
+                for (let rank of RANKS) {
+                    if (spent < rank.threshold) {
+                        nextRank = rank;
+                    }
+                }
+                
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                const nextRankEl = document.getElementById('nextRank');
+                
+                if (!progressBar || !progressText || !nextRankEl) {
+                    console.error('Progress elements not found');
+                    return;
+                }
+                
+                if (nextRank) {
+                    // حساب التقدم
+                    const progress = Math.min(100, (spent / nextRank.threshold) * 100);
+                    const progressRounded = Math.round(progress);
+                    
+                    progressBar.style.width = progress + '%';
+                    progressText.textContent = progressRounded + '%';
+                    nextRankEl.textContent = `🎯 اللقب القادم: ${nextRank.name}`;
+                } else {
+                    // وصل لأعلى رتبة
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    nextRankEl.textContent = '🎉 وصلت لأعلى لقب!';
+                }
+                
+            } catch (e) {
+                console.error('Error updating progress bar:', e);
+            }
+        }
+        
+        // ============= دالة الشراء المحصنة =============
+        function buyProduct(category, amount) {
+            try {
+                // منع الشراء المزدوج
+                if (purchaseInProgress) {
+                    showError('⏳ جاري معالجة طلبك...');
+                    return;
+                }
+                
+                // التحقق من صحة المدخلات
+                if (!category || !amount) {
+                    showError('❌ بيانات غير صحيحة');
+                    return;
+                }
+                
+                // التحقق من صحة الفئة
+                if (!PRODUCTS[category]) {
+                    showError('❌ منتج غير صحيح');
+                    return;
+                }
+                
+                // التحقق من صحة السعر
+                if (!validatePrice(category, amount)) {
+                    showError('❌ سعر غير صحيح');
+                    return;
+                }
+                
+                // التحقق من تهيئة Telegram
+                if (!tg || !isInitialized) {
+                    showError('❌ خطأ في الاتصال بتيليجرام');
+                    return;
+                }
+                
+                purchaseInProgress = true;
+                
+                // Haptic feedback
+                try {
+                    if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
+                        tg.HapticFeedback.impactOccurred('medium');
+                    }
+                } catch (e) {
+                    console.warn('Haptic feedback not available:', e);
+                }
+                
+                const product = PRODUCTS[category];
+                const formattedPrice = (amount / 1000).toFixed(0) + 'K';
+                
+                // عرض رسالة قبل الانتقال
+                try {
+                    if (tg.showPopup) {
+                        tg.showPopup({
+                            title: '💫 تأكيد الشراء',
+                            message: `${product.emoji} ${product.name}\n💰 السعر: ${formattedPrice} ⭐\n\nسيتم فتح نافذة الدفع`,
+                            buttons: [
+                                {id: 'buy', type: 'default', text: '✅ متابعة'},
+                                {id: 'cancel', type: 'cancel', text: '❌ إلغاء'}
+                            ]
+                        }, function(button_id) {
+                            if (button_id === 'buy') {
+                                openInvoice(category, amount);
+                            } else {
+                                purchaseInProgress = false;
+                            }
+                        });
+                    } else {
+                        // مباشرة إذا showPopup غير متاح
+                        openInvoice(category, amount);
+                    }
+                } catch (e) {
+                    console.warn('showPopup not available:', e);
+                    openInvoice(category, amount);
+                }
+                
+            } catch (e) {
+                console.error('Error in buyProduct:', e);
+                showError('❌ حدث خطأ في عملية الشراء');
+                purchaseInProgress = false;
+            }
+        }
+        
+        function openInvoice(category, amount) {
+            try {
+                // إنشاء deep link
+                const deepLink = `https://t.me/${BOT_USERNAME}?start=buy_${category}_${amount}`;
+                
+                // إغلاق Web App وفتح البوت
+                try {
+                    tg.close();
+                    if (tg.openLink) {
+                        tg.openLink(deepLink);
+                    } else if (tg.openTelegramLink) {
+                        tg.openTelegramLink(deepLink);
+                    } else {
+                        window.location.href = deepLink;
+                    }
+                } catch (e) {
+                    console.error('Error opening link:', e);
+                    showError('❌ خطأ في فتح البوت');
+                }
+                
+                // إعادة تعيين حالة الشراء
+                setTimeout(() => {
+                    purchaseInProgress = false;
+                }, 2000);
+                
+            } catch (e) {
+                console.error('Error opening invoice:', e);
+                purchaseInProgress = false;
+            }
+        }
+        
+        // ============= إعداد الأزرار =============
+        function setupButtons() {
+            try {
+                if (!tg) return;
+                
+                // زر التحديث
+                try {
+                    if (tg.MainButton) {
+                        tg.MainButton.setText('🔄 تحديث البيانات');
+                        tg.MainButton.show();
+                        tg.MainButton.onClick(handleRefresh);
+                    }
+                } catch (e) {
+                    console.warn('Could not setup MainButton:', e);
+                }
+                
+                // زر الرجوع
+                try {
+                    if (tg.BackButton) {
+                        tg.BackButton.show();
+                        tg.BackButton.onClick(handleBack);
+                    }
+                } catch (e) {
+                    console.warn('Could not setup BackButton:', e);
+                }
+                
+            } catch (e) {
+                console.error('Error setting up buttons:', e);
+            }
+        }
+        
+        // ============= معالجات الأزرار =============
+        function handleRefresh() {
+            try {
+                // Haptic feedback
+                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
+                    tg.HapticFeedback.impactOccurred('light');
+                }
+                
+                // إعادة تحميل الصفحة
+                location.reload();
+            } catch (e) {
+                console.error('Error refreshing:', e);
+                showError('❌ خطأ في التحديث');
+            }
+        }
+        
+        function handleBack() {
+            try {
+                if (tg && tg.close) {
+                    tg.close();
+                } else {
+                    // Fallback
+                    window.history.back();
+                }
+            } catch (e) {
+                console.error('Error going back:', e);
+            }
+        }
+        
+        // ============= تعطيل الأزرار أثناء التحميل =============
+        function setButtonsDisabled(disabled) {
+            try {
+                const buttons = document.querySelectorAll('.price-btn');
+                buttons.forEach(button => {
+                    button.disabled = disabled;
+                });
+            } catch (e) {
+                console.error('Error setting buttons disabled:', e);
+            }
+        }
+        
+        // ============= معالج الأخطاء العام =============
+        window.addEventListener('error', function(event) {
+            console.error('Global error:', event.error);
+            showError('❌ حدث خطأ غير متوقع');
+        });
+        
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError('❌ حدث خطأ في الاتصال');
+        });
+        
+        // ============= تهيئة التطبيق =============
+        function initApp() {
+            try {
+                console.log('Initializing app...');
+                
+                // تهيئة Telegram
+                if (!initTelegram()) {
+                    console.error('Failed to initialize Telegram');
+                    showError('❌ خطأ في الاتصال بتيليجرام');
+                    return;
+                }
+                
+                console.log('Telegram initialized successfully');
+                
+                // تحميل بيانات المستخدم
+                loadUserData();
+                
+                // إعداد الأزرار
+                setupButtons();
+                
+                // تفعيل الأزرار
+                setButtonsDisabled(false);
+                
+                console.log('App initialized successfully');
+                
+            } catch (e) {
+                console.error('Fatal error initializing app:', e);
+                showError('❌ خطأ فادح في تشغيل التطبيق');
+            }
+        }
+        
+        // ============= انتظار تحميل الصفحة =============
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            // الصفحة محملة بالفعل
+            initApp();
+        }
+        
+        // ============= التحقق من Telegram WebApp كل فترة =============
+        let checkAttempts = 0;
+        const maxAttempts = 10;
+        
+        function checkTelegramAvailability() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                console.log('Telegram WebApp is available');
+                return;
+            }
+            
+            checkAttempts++;
+            if (checkAttempts < maxAttempts) {
+                console.log(`Waiting for Telegram WebApp... Attempt ${checkAttempts}`);
+                setTimeout(checkTelegramAvailability, 500);
+            } else {
+                console.error('Telegram WebApp not available after maximum attempts');
+                showError('❌ فشل الاتصال بتيليجرام');
+            }
+        }
+        
+        // بدء التحقق
+        checkTelegramAvailability();
+        
+        // ============= حماية من التلاعب بـ console =============
+        (function() {
+            try {
+                // حماية بسيطة من التلاعب
+                const noop = function() {};
+                
+                if (!window.console) {
+                    window.console = {
+                        log: noop,
+                        warn: noop,
+                        error: noop,
+                        info: noop
+                    };
+                }
+            } catch (e) {
+                // Silent fail
+            }
+        })();
+    </script>
+</body>
+</html>
+        
         function safeSetText(elementId, text) {
             try {
                 const element = document.getElementById(elementId);
