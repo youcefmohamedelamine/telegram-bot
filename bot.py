@@ -11,25 +11,19 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from aiohttp import web
-import asyncio
 
-# ============= Settings ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 PROVIDER_TOKEN = ""
 ORDERS_FILE = "orders.json"
 WEB_APP_URL = "YOUR_WEB_APP_URL"
-WEBHOOK_PORT = 8080
 
-# ============= Logging ============
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ============= Product Info ============
 PRODUCTS = {
     "small": {"name": "🔹 لاشيء صغير", "emoji": "🔹", "desc": "مثالي للمبتدئين"},
     "medium": {"name": "🔷 لاشيء متوسط", "emoji": "🔷", "desc": "الأكثر شعبية"},
@@ -47,7 +41,6 @@ RANKS = [
     (0, "🌱 زائر جديد")
 ]
 
-# ============= Data Management ============
 class OrderManager:
     def __init__(self, filename):
         self.filename = filename
@@ -86,7 +79,6 @@ class OrderManager:
         return len(self.orders[user_id].get("history", []))
 
 order_manager = OrderManager(ORDERS_FILE)
-bot_app = None
 
 def get_user_title(total_spent):
     for threshold, title in RANKS:
@@ -94,124 +86,72 @@ def get_user_title(total_spent):
             return title
     return RANKS[-1][1]
 
-# ============= Web Server for API ============
-async def create_invoice_handler(request):
-    try:
-        data = await request.json()
-        category = data.get('category')
-        amount = data.get('amount')
-        user_id = data.get('user_id')
-        
-        if not all([category, amount, user_id]):
-            return web.json_response({'error': 'Missing parameters'}, status=400)
-        
-        product = PRODUCTS.get(category)
-        if not product:
-            return web.json_response({'error': 'Invalid product'}, status=400)
-        
-        # إنشاء رابط الفاتورة
-        bot = bot_app.bot
-        invoice_link = await bot.create_invoice_link(
-            title=f"{product['emoji']} {product['name']}",
-            description=f"{product['desc']} - {amount:,} نجمة",
-            payload=f"order_{user_id}_{category}_{amount}",
-            provider_token=PROVIDER_TOKEN,
-            currency="XTR",
-            prices=[LabeledPrice(product['name'], amount)]
-        )
-        
-        return web.json_response({'invoice_link': invoice_link})
-        
-    except Exception as e:
-        logger.error(f"Error creating invoice: {e}")
-        return web.json_response({'error': str(e)}, status=500)
-
-async def get_user_data_handler(request):
-    try:
-        user_id = request.query.get('user_id')
-        if not user_id:
-            return web.json_response({'error': 'Missing user_id'}, status=400)
-        
-        total_spent = order_manager.get_total_spent(user_id)
-        order_count = order_manager.get_order_count(user_id)
-        rank = get_user_title(total_spent)
-        
-        return web.json_response({
-            'totalSpent': total_spent,
-            'orderCount': order_count,
-            'rank': rank
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting user data: {e}")
-        return web.json_response({'error': str(e)}, status=500)
-
-async def start_web_server():
-    app = web.Application()
-    
-    # إضافة CORS headers
-    async def cors_middleware(app, handler):
-        async def middleware(request):
-            if request.method == 'OPTIONS':
-                return web.Response(
-                    headers={
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type'
-                    }
-                )
-            response = await handler(request)
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            return response
-        return middleware
-    
-    app.middlewares.append(cors_middleware)
-    app.router.add_post('/api/create_invoice', create_invoice_handler)
-    app.router.add_get('/api/user_data', get_user_data_handler)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', WEBHOOK_PORT)
-    await site.start()
-    logger.info(f"Web server started on port {WEBHOOK_PORT}")
-
-# ============= Start Command ============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = str(user.id)
+    
+    if context.args and context.args[0].startswith('buy_'):
+        try:
+            parts = context.args[0].split('_')
+            category = parts[1]
+            amount = int(parts[2])
+            
+            product = PRODUCTS.get(category)
+            if not product:
+                await update.message.reply_text("منتج غير صحيح")
+                return
+            
+            prices = [LabeledPrice(product["name"], amount)]
+            
+            await update.message.reply_invoice(
+                title=f"{product['emoji']} {product['name']}",
+                description=f"{product['desc']}\nالسعر: {amount:,} نجمة",
+                payload=f"order_{user_id}_{category}_{amount}",
+                provider_token=PROVIDER_TOKEN,
+                currency="XTR",
+                prices=prices
+            )
+            return
+        except Exception as e:
+            logger.error(f"Error: {e}")
+            await update.message.reply_text("حدث خطأ في إنشاء الفاتورة")
+            return
     
     total_spent = order_manager.get_total_spent(user_id)
     user_title = get_user_title(total_spent)
     order_count = order_manager.get_order_count(user_id)
     
-    keyboard = [[
-        InlineKeyboardButton("🛍️ افتح المتجر", web_app={"url": WEB_APP_URL})
-    ]]
+    user_data = {
+        "totalSpent": total_spent,
+        "orderCount": order_count,
+        "rank": user_title
+    }
+    
+    import base64
+    encoded_data = base64.b64encode(json.dumps(user_data).encode()).decode()
+    web_url = f"{WEB_APP_URL}?startapp={encoded_data}"
+    
+    keyboard = [[InlineKeyboardButton("🛍️ افتح المتجر", web_app={"url": web_url})]]
     
     welcome = f"""╔══════════════════════╗
 ║   🌟 متجر اللاشيء 🌟   ║
 ╚══════════════════════╝
 
-مرحباً *{user.first_name}*! 👋
+مرحباً {user.first_name}
+
 {user_title}
 
-💰 إجمالي إنفاقك: *{total_spent:,} ⭐*
-📦 عدد طلباتك: *{order_count}*
+💰 إجمالي إنفاقك: {total_spent:,} ⭐
+📦 عدد طلباتك: {order_count}
 
 🎭 اضغط الزر أدناه للتسوق:"""
     
-    await update.message.reply_text(
-        welcome,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text(welcome, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ============= Pre-Checkout Handler ============
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     await query.answer(ok=True)
 
-# ============= Successful Payment ============
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = str(user.id)
@@ -238,30 +178,30 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     rank_up = ""
     if old_title != new_title:
-        rank_up = f"\n\n🎊 *تهانينا! ترقية اللقب!*\n{old_title} ➜ {new_title}"
+        rank_up = f"\n\n🎊 تهانينا! ترقية اللقب!\n{old_title} ➜ {new_title}"
     
     success = f"""╔══════════════════════╗
 ║   🎉 تم الدفع بنجاح! 🎉   ║
 ╚══════════════════════╝
 
-عزيزي *{user.first_name}*،
+عزيزي {user.first_name}،
 
 ✨ تمت عملية الشراء بنجاح!
 
 ━━━━━━━━━━━━━━━━
-📦 المنتج: *{product['name']}*
-💰 المبلغ: *{payment.total_amount:,} ⭐*
-📅 التاريخ: `{datetime.now().strftime("%Y-%m-%d %H:%M")}`
+📦 المنتج: {product['name']}
+💰 المبلغ: {payment.total_amount:,} ⭐
+📅 التاريخ: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 ━━━━━━━━━━━━━━━━
 
-🏷️ *لقبك الحالي:* {new_title}
-💎 *إجمالي إنفاقك:* {total_spent:,} ⭐{rank_up}
+🏷️ لقبك الحالي: {new_title}
+💎 إجمالي إنفاقك: {total_spent:,} ⭐{rank_up}
 
 ━━━━━━━━━━━━━━━━
 🎁 مبروك! أنت الآن مالك رسمي للاشيء
-💫 شكراً لثقتك بنا! 💕"""
+💫 شكراً لثقتك بنا!"""
     
-    await update.message.reply_text(success, parse_mode="Markdown")
+    await update.message.reply_text(success)
     
     if ADMIN_ID:
         try:
@@ -273,28 +213,22 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 📛 {user.first_name}
 🏷️ {new_title}
 📦 {product['name']}
-💰 *{payment.total_amount:,} ⭐*
-🕐 `{datetime.now().strftime("%Y-%m-%d %H:%M")}`"""
+💰 {payment.total_amount:,} ⭐
+🕐 {datetime.now().strftime("%Y-%m-%d %H:%M")}"""
             
-            await context.bot.send_message(ADMIN_ID, admin_msg, parse_mode="Markdown")
+            await context.bot.send_message(ADMIN_ID, admin_msg)
         except Exception as e:
-            logger.error(f"Error sending admin notification: {e}")
+            logger.error(f"Error: {e}")
 
-# ============= Main ============
-async def main():
-    global bot_app
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
     
-    bot_app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(PreCheckoutQueryHandler(precheckout))
-    bot_app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
-    
-    # تشغيل الويب سيرفر
-    await start_web_server()
-    
-    logger.info("🚀 Bot is running with API server...")
-    await bot_app.run_polling()
+    logger.info("🚀 Bot is running...")
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
