@@ -12,8 +12,8 @@ import asyncpg
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
-    Application,
-    CommandHandler,
+    Application,
+    CommandHandler,
     ContextTypes,
     PreCheckoutQueryHandler,
     MessageHandler,
