@@ -203,7 +203,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             title=f"{product['emoji']} {product['name']}",
             description=f"✨ {product['desc']}",
             payload=payload,
-            provider_token="", # يجب تعيين توكن مزود الدفع هنا
+            provider_token="390000000:2922131602909477665", # يجب تعيين توكن مزود الدفع هنا
             currency="XTR",
             prices=[{'label': "السعر", 'amount': amount}],
             max_tip_amount=50000,
