@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="متجر اللاشيء - امتلك العدم بأفضل الأسعار">
     <title>متجر اللاشيء</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -76,6 +77,8 @@
         .profile-info h2 {
             font-size: 1.3em;
             margin-bottom: 5px;
+            word-wrap: break-word;
+            max-width: 300px;
         }
         
         .rank-badge {
@@ -134,6 +137,7 @@
             justify-content: center;
             font-weight: bold;
             font-size: 0.9em;
+            min-width: 40px;
         }
         
         .next-rank {
@@ -216,6 +220,32 @@
             transform: scale(0.95);
         }
         
+        .price-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid rgba(255, 0, 0, 0.5);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+            animation: shake 0.5s;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px 0;
+            font-size: 1.2em;
+        }
+        
         .floating {
             animation: floating 3s ease-in-out infinite;
         }
@@ -250,6 +280,12 @@
                 transform: translateY(-8px);
             }
         }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
     </style>
 </head>
 <body>
@@ -257,6 +293,10 @@
         <div class="header floating">
             <h1>🌟 متجر اللاشيء 🌟</h1>
             <p class="subtitle">امتلك العدم بأفضل الأسعار</p>
+        </div>
+        
+        <div class="error-message" id="errorMessage">
+            ❌ حدث خطأ! حاول مرة أخرى
         </div>
         
         <div class="profile-card">
@@ -329,129 +369,157 @@
     </div>
     
     <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.setHeaderColor('#667eea');
-        tg.setBackgroundColor('#667eea');
+        // ============= المتغيرات العامة =============
+        let tg = null;
+        let isInitialized = false;
+        let purchaseInProgress = false;
         
+        // ============= البيانات الثابتة =============
         const PRODUCTS = {
             'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
             'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
             'large': {name: '💠 لاشيء كبير', emoji: '💠'}
         };
         
-        function getUserTitle(totalSpent) {
-            if (totalSpent >= 500000) return "👑 إمبراطور العدم";
-            if (totalSpent >= 300000) return "💎 ملك اللاشيء";
-            if (totalSpent >= 200000) return "🏆 أمير الفراغ";
-            if (totalSpent >= 100000) return "⭐ نبيل العدم";
-            if (totalSpent >= 50000) return "🌟 فارس اللاشيء";
-            if (totalSpent >= 20000) return "✨ تاجر العدم";
-            if (totalSpent >= 10000) return "🎯 مبتدئ اللاشيء";
-            return "🌱 زائر جديد";
-        }
+        const VALID_PRICES = {
+            'small': [5000, 10000, 15000],
+            'medium': [20000, 30000, 40000],
+            'large': [50000, 75000, 100000]
+        };
         
-        function loadUserData() {
+        const RANKS = [
+            {threshold: 500000, name: '👑 إمبراطور العدم'},
+            {threshold: 300000, name: '💎 ملك اللاشيء'},
+            {threshold: 200000, name: '🏆 أمير الفراغ'},
+            {threshold: 100000, name: '⭐ نبيل العدم'},
+            {threshold: 50000, name: '🌟 فارس اللاشيء'},
+            {threshold: 20000, name: '✨ تاجر العدم'},
+            {threshold: 10000, name: '🎯 مبتدئ اللاشيء'},
+            {threshold: 0, name: '🌱 زائر جديد'}
+        ];
+        
+        const BOT_USERNAME = 'WinterLand_bot'; // استبدلها باسم البوت الخاص بك
+        
+        // ============= دوال مساعدة =============
+        function showError(message) {
             try {
-                const user = tg.initDataUnsafe?.user;
-                if (user) {
-                    document.getElementById('userName').textContent = user.first_name || 'مستخدم';
+                const errorEl = document.getElementById('errorMessage');
+                if (errorEl) {
+                    errorEl.textContent = message || '❌ حدث خطأ! حاول مرة أخرى';
+                    errorEl.classList.add('show');
                     
-                    const startParam = tg.initDataUnsafe?.start_param;
-                    if (startParam) {
-                        try {
-                            const data = JSON.parse(atob(startParam));
-                            updateUserInterface(data);
-                            return;
-                        } catch (e) {
-                            console.log('Error parsing start param:', e);
-                        }
-                    }
+                    setTimeout(() => {
+                        errorEl.classList.remove('show');
+                    }, 3000);
                 }
             } catch (e) {
-                console.log('Error loading user data:', e);
+                console.error('Error showing error message:', e);
             }
-            
-            updateUserInterface({
-                totalSpent: 0,
-                orderCount: 0,
-                rank: '🌱 زائر جديد'
-            });
         }
         
-        function updateUserInterface(data) {
-            const totalSpent = data.totalSpent || 0;
-            document.getElementById('totalSpent').textContent = totalSpent.toLocaleString();
-            document.getElementById('orderCount').textContent = data.orderCount || 0;
-            
-            const rank = getUserTitle(totalSpent);
-            document.getElementById('userRank').textContent = rank;
-            
-            const ranks = [
-                {threshold: 10000, name: '🎯 مبتدئ اللاشيء'},
-                {threshold: 20000, name: '✨ تاجر العدم'},
-                {threshold: 50000, name: '🌟 فارس اللاشيء'},
-                {threshold: 100000, name: '⭐ نبيل العدم'},
-                {threshold: 200000, name: '🏆 أمير الفراغ'},
-                {threshold: 300000, name: '💎 ملك اللاشيء'},
-                {threshold: 500000, name: '👑 إمبراطور العدم'}
-            ];
-            
-            let nextRank = null;
-            for (let r of ranks) {
-                if (totalSpent < r.threshold) {
-                    nextRank = r;
-                    break;
+        function sanitizeText(text, maxLength = 100) {
+            try {
+                if (typeof text !== 'string') {
+                    return 'مستخدم';
                 }
-            }
-            
-            if (nextRank) {
-                const progress = Math.min((totalSpent / nextRank.threshold) * 100, 100);
-                document.getElementById('progressBar').style.width = progress + '%';
-                document.getElementById('progressText').textContent = Math.round(progress) + '%';
-                document.getElementById('nextRank').textContent = `🎯 اللقب القادم: ${nextRank.name}`;
-            } else {
-                document.getElementById('progressBar').style.width = '100%';
-                document.getElementById('progressText').textContent = '100%';
-                document.getElementById('nextRank').textContent = '🎉 وصلت لأعلى لقب!';
-            }
-        }
-        
-        function buyProduct(category, amount) {
-            // Haptic feedback
-            if (tg.HapticFeedback) {
-                tg.HapticFeedback.impactOccurred('medium');
-            }
-            
-            // الحصول على معلومات البوت
-            const botUsername = 'WinterLand_bot'; // استبدلها باسم البوت بتاعك
-            
-            // إنشاء deep link للبوت
-            const deepLink = `https://t.me/${botUsername}?start=buy_${category}_${amount}`;
-            
-            // فتح الرابط في نفس النافذة (هيرجع للبوت)
-            tg.openLink(deepLink);
-        }
-        
-        window.addEventListener('load', function() {
-            loadUserData();
-            
-            // إعداد الزر الرئيسي
-            tg.MainButton.setText('🔄 تحديث البيانات');
-            tg.MainButton.show();
-            tg.MainButton.onClick(function() {
-                if (tg.HapticFeedback) {
-                    tg.HapticFeedback.impactOccurred('light');
+                
+                text = text.trim();
+                if (text.length > maxLength) {
+                    text = text.substring(0, maxLength);
                 }
-                location.reload();
-            });
-            
-            // زر الإغلاق
-            tg.BackButton.show();
-            tg.BackButton.onClick(function() {
-                tg.close();
-            });
-        });
-    </script>
-</body>
-</html>
+                
+                // إزالة HTML tags
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.textContent || 'مستخدم';
+            } catch (e) {
+                console.error('Error sanitizing text:', e);
+                return 'مستخدم';
+            }
+        }
+        
+        function formatNumber(num) {
+            try {
+                const number = parseInt(num);
+                if (isNaN(number)) return '0';
+                return number.toLocaleString('ar-EG');
+            } catch (e) {
+                return '0';
+            }
+        }
+        
+        function getUserTitle(totalSpent) {
+            try {
+                const spent = parseInt(totalSpent) || 0;
+                
+                for (let rank of RANKS) {
+                    if (spent >= rank.threshold) {
+                        return rank.name;
+                    }
+                }
+                
+                return RANKS[RANKS.length - 1].name;
+            } catch (e) {
+                console.error('Error getting user title:', e);
+                return '🌱 زائر جديد';
+            }
+        }
+        
+        function validatePrice(category, amount) {
+            try {
+                if (!category || !VALID_PRICES[category]) {
+                    return false;
+                }
+                
+                const price = parseInt(amount);
+                if (isNaN(price)) {
+                    return false;
+                }
+                
+                return VALID_PRICES[category].includes(price);
+            } catch (e) {
+                console.error('Error validating price:', e);
+                return false;
+            }
+        }
+        
+        function safeSetText(elementId, text) {
+            try {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.textContent = sanitizeText(String(text));
+                }
+            } catch (e) {
+                console.error(`Error setting text for ${elementId}:`, e);
+            }
+        }
+        
+        // ============= تهيئة Telegram Web App =============
+        function initTelegram() {
+            try {
+                if (!window.Telegram || !window.Telegram.WebApp) {
+                    console.error('Telegram WebApp not available');
+                    showError('❌ خطأ في تحميل التطبيق');
+                    return false;
+                }
+                
+                tg = window.Telegram.WebApp;
+                
+                // تهيئة WebApp
+                tg.expand();
+                
+                // تعيين الألوان بشكل آمن
+                try {
+                    if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
+                    if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
+                } catch (e) {
+                    console.warn('Could not set colors:', e);
+                }
+                
+                isInitialized = true;
+                return true;
+            } catch (e) {
+                console.error('Error initializing Telegram:', e);
+                showError('❌ خطأ في الاتصال بتيليجرام');
+                return false;
+            }
