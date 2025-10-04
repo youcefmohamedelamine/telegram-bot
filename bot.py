@@ -142,6 +142,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"مستخدم دخل: {user.id} - {user.first_name}")
 
 # ============= معالج البيانات من Web App =============
+# ============= معالج البيانات من Web App ============= 
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         logger.info(f"استقبال web_app_data من: {update.message.from_user.id}")
@@ -167,8 +168,8 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
                 title=f"{product['emoji']} {product['name']}",
                 description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
                 payload=f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}",
-                provider_token="",
-                currency="XTR",
+                provider_token="",   # ← فارغ للنجوم
+                currency="XTR",      # ← عملة النجوم
                 prices=[LabeledPrice("السعر", amount)],
                 max_tip_amount=50000,
                 suggested_tip_amounts=[1000, 5000, 10000, 25000]
@@ -183,7 +184,8 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         except:
             pass
 
-# ============= معالج الأزرار Inline =============
+
+# ============= معالج الأزرار Inline ============= 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -205,8 +207,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 title=f"{product['emoji']} {product['name']}",
                 description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
                 payload=f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}",
-                provider_token="",
-                currency="XTR",
+                provider_token="",   # ← فارغ للنجوم
+                currency="XTR",      # ← عملة النجوم
                 prices=[LabeledPrice("السعر", amount)],
                 max_tip_amount=50000,
                 suggested_tip_amounts=[1000, 5000, 10000, 25000]
