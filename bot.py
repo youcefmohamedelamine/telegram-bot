@@ -1,6 +1,8 @@
 import logging
 import json
 import os
+import signal
+import sys
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import (
@@ -15,7 +17,7 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
-PROVIDER_TOKEN = ""  # اتركه فاضي لـ Telegram Stars
+PROVIDER_TOKEN = ""
 ORDERS_FILE = "orders.json"
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
@@ -81,6 +83,15 @@ class OrderManager:
         if user_id not in self.orders:
             return 0
         return len(self.orders[user_id].get("history", []))
+    
+    def get_total_users(self):
+        return len(self.orders)
+    
+    def get_total_revenue(self):
+        total = 0
+        for user_data in self.orders.values():
+            total += sum(o.get("amount", 0) for o in user_data.get("history", []))
+        return total
 
 order_manager = OrderManager(ORDERS_FILE)
 
@@ -94,7 +105,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = str(user.id)
     
-    # التحقق من وجود أمر شراء في الرابط
     if context.args and context.args[0].startswith('buy_'):
         try:
             parts = context.args[0].split('_')
@@ -107,7 +117,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ منتج غير صحيح")
                     return
                 
-                # إنشاء الفاتورة
                 prices = [LabeledPrice(product["name"], amount)]
                 
                 await update.message.reply_invoice(
@@ -124,12 +133,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ حدث خطأ في إنشاء الفاتورة، حاول مرة أخرى")
             return
     
-    # عرض الصفحة الرئيسية
     total_spent = order_manager.get_total_spent(user_id)
     user_title = get_user_title(total_spent)
     order_count = order_manager.get_order_count(user_id)
     
-    # تشفير بيانات المستخدم لإرسالها للويب أب
     user_data = {
         "totalSpent": total_spent,
         "orderCount": order_count,
@@ -140,7 +147,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     encoded_data = base64.b64encode(json.dumps(user_data).encode()).decode()
     web_url = f"{WEB_APP_URL}?startapp={encoded_data}"
     
-    # إنشاء لوحة المفاتيح
     keyboard = [[InlineKeyboardButton("🛍️ افتح المتجر", web_app={"url": web_url})]]
     
     welcome = f"""╔══════════════════════╗
@@ -162,29 +168,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         welcome, 
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='HTML'
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض قائمة المنتجات للشراء المباشر"""
     keyboard = []
     
-    # لاشيء صغير
     keyboard.append([
         InlineKeyboardButton("🔹 5K ⭐", callback_data="buy_small_5000"),
         InlineKeyboardButton("🔹 10K ⭐", callback_data="buy_small_10000"),
         InlineKeyboardButton("🔹 15K ⭐", callback_data="buy_small_15000")
     ])
     
-    # لاشيء متوسط
     keyboard.append([
         InlineKeyboardButton("🔷 20K ⭐", callback_data="buy_medium_20000"),
         InlineKeyboardButton("🔷 30K ⭐", callback_data="buy_medium_30000"),
         InlineKeyboardButton("🔷 40K ⭐", callback_data="buy_medium_40000")
     ])
     
-    # لاشيء كبير
     keyboard.append([
         InlineKeyboardButton("💠 50K ⭐", callback_data="buy_large_50000"),
         InlineKeyboardButton("💠 75K ⭐", callback_data="buy_large_75000"),
@@ -197,13 +198,9 @@ async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔷 لاشيء متوسط - الأكثر شعبية  
 💠 لاشيء كبير - للمحترفين فقط"""
     
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الضغط على أزرار الشراء"""
     query = update.callback_query
     await query.answer()
     
@@ -211,7 +208,6 @@ async def handle_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = str(user.id)
     
     try:
-        # استخراج البيانات من callback_data
         parts = query.data.split('_')
         category = parts[1]
         amount = int(parts[2])
@@ -221,7 +217,6 @@ async def handle_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.message.reply_text("❌ منتج غير صحيح")
             return
         
-        # إنشاء الفاتورة
         prices = [LabeledPrice(product["name"], amount)]
         
         await query.message.reply_invoice(
@@ -237,24 +232,20 @@ async def handle_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
 
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """التحقق قبل الدفع"""
     query = update.pre_checkout_query
     await query.answer(ok=True)
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الدفع الناجح"""
     user = update.message.from_user
     user_id = str(user.id)
     payment = update.message.successful_payment
     
     try:
-        # استخراج البيانات من payload
         payload_parts = payment.invoice_payload.split("_")
         category = payload_parts[2] if len(payload_parts) > 2 else "unknown"
         
         product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨", "desc": ""})
         
-        # حفظ الطلب
         order_data = {
             "time": datetime.now().isoformat(),
             "amount": payment.total_amount,
@@ -265,7 +256,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         }
         order_manager.add_order(user_id, order_data)
         
-        # حساب الترقية
         total_spent = order_manager.get_total_spent(user_id)
         old_total = total_spent - payment.total_amount
         old_title = get_user_title(old_total)
@@ -275,7 +265,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if old_title != new_title:
             rank_up = f"\n\n🎊 تهانينا! ترقية اللقب!\n{old_title} ➜ {new_title}"
         
-        # رسالة النجاح
         success = f"""╔══════════════════════╗
 ║   🎉 تم الدفع بنجاح! 🎉   ║
 ╚══════════════════════╝
@@ -301,7 +290,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         await update.message.reply_text(success)
         
-        # إرسال إشعار للأدمن
         if ADMIN_ID:
             try:
                 admin_msg = f"""╔══════════════════════╗
@@ -328,15 +316,28 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("✅ تم الدفع بنجاح!\nحدث خطأ في حفظ الطلب، تواصل مع الدعم")
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض إحصائيات المستخدم"""
     user = update.message.from_user
     user_id = str(user.id)
+    
+    # إحصائيات عامة للأدمن
+    if str(user.id) == ADMIN_ID:
+        total_users = order_manager.get_total_users()
+        total_revenue = order_manager.get_total_revenue()
+        
+        admin_stats = f"""╔══════════════════════╗
+║   📊 إحصائيات عامة   ║
+╚══════════════════════╝
+
+👥 إجمالي المستخدمين: {total_users}
+💰 إجمالي الإيرادات: {total_revenue:,} ⭐
+
+━━━━━━━━━━━━━━━━"""
+        await update.message.reply_text(admin_stats)
     
     total_spent = order_manager.get_total_spent(user_id)
     order_count = order_manager.get_order_count(user_id)
     user_title = get_user_title(total_spent)
     
-    # حساب التقدم للرتبة القادمة
     next_rank_info = ""
     for threshold, title in RANKS:
         if total_spent < threshold:
@@ -366,7 +367,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(stats)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض المساعدة"""
     help_text = """╔══════════════════════╗
 ║   📖 المساعدة   ║
 ╚══════════════════════╝
@@ -391,7 +391,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text)
 
 async def ranks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض جميع الرتب"""
     ranks_text = """╔══════════════════════╗
 ║   🏆 الرتب المتاحة   ║
 ╚══════════════════════╝
@@ -410,25 +409,29 @@ async def ranks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(ranks_text)
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """معالج الأخطاء العام"""
+    logger.error(f"Exception while handling an update: {context.error}")
+    
+    # إرسال رسالة للأدمن في حالة الأخطاء الكبيرة
+    if ADMIN_ID and isinstance(update, Update):
+        try:
+            error_msg = f"⚠️ خطأ:\n{str(context.error)[:500]}"
+            await context.bot.send_message(ADMIN_ID, error_msg)
+        except:
+            pass
+
 def main():
     """تشغيل البوت"""
     if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN غير موجود! ضعه في متغيرات البيئة")
+        logger.error("❌ BOT_TOKEN غير موجود!")
         return
     
-    # إنشاء التطبيق مع إعدادات محسّنة
+    # إنشاء التطبيق
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # حذف أي webhook موجود
-    import asyncio
-    async def delete_webhook():
-        try:
-            await app.bot.delete_webhook(drop_pending_updates=True)
-            logger.info("✅ تم حذف الـ Webhook")
-        except Exception as e:
-            logger.warning(f"⚠️ خطأ في حذف الـ Webhook: {e}")
-    
-    asyncio.run(delete_webhook())
+    # إضافة معالج الأخطاء
+    app.add_error_handler(error_handler)
     
     # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
@@ -443,16 +446,24 @@ def main():
     logger.info("🚀 البوت يعمل الآن...")
     logger.info(f"📁 ملف الطلبات: {ORDERS_FILE}")
     
-    # تشغيل البوت مع معالجة الأخطاء
+    # معالجة الإيقاف النظيف
+    def signal_handler(sig, frame):
+        logger.info("\n⏸️ إيقاف البوت...")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # تشغيل البوت
     try:
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            close_loop=False
+            drop_pending_updates=True
         )
+    except KeyboardInterrupt:
+        logger.info("⏸️ تم إيقاف البوت")
     except Exception as e:
-        logger.error(f"❌ خطأ في تشغيل البوت: {e}")
-        logger.info("💡 تأكد من عدم وجود نسخة أخرى من البوت تعمل")
+        logger.error(f"❌ خطأ: {e}")
 
 if __name__ == "__main__":
     main()
