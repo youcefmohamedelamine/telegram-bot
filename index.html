@@ -171,6 +171,11 @@
             transform: scale(0.95);
         }
         
+        .price-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
         .message {
             position: fixed;
             top: 20px;
@@ -198,6 +203,12 @@
         .message.error {
             background: rgba(255, 0, 0, 0.2);
             border: 2px solid rgba(255, 0, 0, 0.5);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 30px;
+            font-size: 1.2em;
         }
         
         @keyframes fadeInDown {
@@ -307,6 +318,27 @@
         const tg = window.Telegram.WebApp;
         let processing = false;
         
+        // ✅ الإصلاح: نظام الرتب الكامل
+        const RANKS = [
+            { min: 500000, title: "إمبراطور العدم 👑" },
+            { min: 300000, title: "ملك اللاشيء 💎" },
+            { min: 200000, title: "أمير الفراغ 🏆" },
+            { min: 100000, title: "نبيل العدم ⭐" },
+            { min: 50000, title: "فارس اللاشيء 🌟" },
+            { min: 20000, title: "تاجر العدم ✨" },
+            { min: 10000, title: "مبتدئ اللاشيء 🎯" },
+            { min: 0, title: "زائر جديد 🌱" }
+        ];
+        
+        function getRank(totalSpent) {
+            for (let rank of RANKS) {
+                if (totalSpent >= rank.min) {
+                    return rank.title;
+                }
+            }
+            return RANKS[RANKS.length - 1].title;
+        }
+        
         function showMessage(text, type) {
             const msg = document.getElementById('message');
             msg.textContent = text;
@@ -318,25 +350,64 @@
             return parseInt(num || 0).toLocaleString('ar-EG');
         }
         
+        // ✅ الإصلاح: تحميل البيانات بشكل صحيح
         function loadUserData() {
             try {
+                // الحصول على معلومات المستخدم
                 const user = tg.initDataUnsafe?.user;
-                if (user?.first_name) {
-                    document.getElementById('userName').textContent = user.first_name;
+                
+                if (user) {
+                    // عرض اسم المستخدم
+                    document.getElementById('userName').textContent = user.first_name || 'مرحباً';
+                    
+                    console.log('✅ تم تحميل بيانات المستخدم:', user);
                 }
                 
-                const startParam = tg.initDataUnsafe?.start_param;
-                if (startParam) {
-                    const data = JSON.parse(atob(startParam));
-                    document.getElementById('totalSpent').textContent = formatNumber(data.totalSpent);
-                    document.getElementById('orderCount').textContent = formatNumber(data.orderCount);
-                    document.getElementById('userRank').textContent = data.rank || '🌱 زائر جديد';
+                // ✅ محاولة قراءة البيانات المحفوظة محلياً (بعد كل عملية شراء)
+                const userId = user?.id;
+                if (userId) {
+                    const savedData = getSavedUserData(userId);
+                    if (savedData) {
+                        updateStats(savedData);
+                    }
                 }
+                
+                // ملاحظة: البيانات الحقيقية يجب أن تأتي من السيرفر
+                // لكن لأنك لا تستخدم Backend API، سنعتمد على التخزين المحلي
+                
             } catch (e) {
-                console.error('خطأ في تحميل البيانات:', e);
+                console.error('❌ خطأ في تحميل البيانات:', e);
             }
         }
         
+        // ✅ حفظ البيانات محلياً (مؤقتاً حتى يتم تحديثها من البوت)
+        function getSavedUserData(userId) {
+            try {
+                const key = `user_stats_${userId}`;
+                const data = localStorage.getItem(key);
+                return data ? JSON.parse(data) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+        
+        function saveUserData(userId, data) {
+            try {
+                const key = `user_stats_${userId}`;
+                localStorage.setItem(key, JSON.stringify(data));
+            } catch (e) {
+                console.error('خطأ في حفظ البيانات:', e);
+            }
+        }
+        
+        // ✅ تحديث الإحصائيات على الشاشة
+        function updateStats(data) {
+            document.getElementById('totalSpent').textContent = formatNumber(data.totalSpent);
+            document.getElementById('orderCount').textContent = formatNumber(data.orderCount);
+            document.getElementById('userRank').textContent = data.rank || getRank(data.totalSpent);
+        }
+        
+        // ✅ الإصلاح: دالة الشراء المُحسّنة
         function buyProduct(category, amount) {
             if (processing) {
                 showMessage('⏳ جاري المعالجة...', 'error');
@@ -346,44 +417,89 @@
             processing = true;
             
             try {
+                // تأثير اهتزاز (إذا كان متاحاً)
                 if (tg.HapticFeedback?.impactOccurred) {
                     tg.HapticFeedback.impactOccurred('medium');
                 }
                 
+                // إنشاء البيانات للإرسال
                 const data = JSON.stringify({
                     action: 'buy',
                     category: category,
                     amount: amount
                 });
                 
-                console.log('إرسال بيانات:', data);
+                console.log('📤 إرسال بيانات الشراء:', data);
+                
+                // ✅ إرسال البيانات للبوت
                 tg.sendData(data);
                 
                 showMessage('✅ تم إرسال الطلب!', 'success');
                 
+                // إعادة تفعيل الأزرار بعد ثانيتين
                 setTimeout(() => {
                     processing = false;
                 }, 2000);
                 
             } catch (e) {
-                console.error('خطأ:', e);
+                console.error('❌ خطأ في الشراء:', e);
                 showMessage('❌ فشل إرسال الطلب', 'error');
                 processing = false;
             }
         }
         
+        // ✅ الاستماع لأحداث تيليجرام
+        tg.onEvent('invoiceClosed', function(obj) {
+            if (obj.status === 'paid') {
+                showMessage('🎉 تم الدفع بنجاح!', 'success');
+                
+                // تحديث البيانات المحلية (تقديرية)
+                const user = tg.initDataUnsafe?.user;
+                if (user) {
+                    const currentData = getSavedUserData(user.id) || { 
+                        totalSpent: 0, 
+                        orderCount: 0 
+                    };
+                    
+                    // هذا تقديري - البيانات الحقيقية من البوت
+                    currentData.orderCount += 1;
+                    currentData.rank = getRank(currentData.totalSpent);
+                    
+                    saveUserData(user.id, currentData);
+                    updateStats(currentData);
+                }
+            } else if (obj.status === 'cancelled') {
+                showMessage('❌ تم إلغاء الدفع', 'error');
+            } else if (obj.status === 'failed') {
+                showMessage('❌ فشل الدفع', 'error');
+            }
+        });
+        
+        // ✅ تهيئة التطبيق
         tg.ready();
         tg.expand();
         
+        // تعيين ألوان التطبيق (اختياري)
         try {
             tg.setHeaderColor('#667eea');
             tg.setBackgroundColor('#667eea');
-        } catch (e) {}
+        } catch (e) {
+            console.log('تعذر تعيين الألوان');
+        }
         
+        // تحميل البيانات
         loadUserData();
         
-        console.log('التطبيق جاهز');
-        console.log('InitData:', tg.initData ? 'موجود' : 'غير موجود');
+        // سجل للتأكد من التشغيل
+        console.log('✅ التطبيق جاهز');
+        console.log('🔗 InitData:', tg.initData ? 'موجود ✓' : 'غير موجود ✗');
+        console.log('👤 المستخدم:', tg.initDataUnsafe?.user);
+        
+        // ✅ إضافة: تحديث البيانات عند العودة للتطبيق
+        window.addEventListener('focus', function() {
+            console.log('🔄 التطبيق عاد للواجهة - تحديث البيانات');
+            loadUserData();
+        });
     </script>
 </body>
 </html>
