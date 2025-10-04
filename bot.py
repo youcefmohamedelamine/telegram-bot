@@ -320,7 +320,7 @@ async def start_api_server(application: Application):
     api_server_runner = web.AppRunner(api_app)
     await api_server_runner.setup()
     
-    site = web.TCPSite(api_server_runner, '0.0.0.0', PORT)
+    site = web.TCPSite(api_server_runner, '0.0.0.0', API_PORT)
     await site.start()
     
     logger.info(f"✅ خادم الـ API يعمل على المنفذ: {PORT}")
