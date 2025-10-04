@@ -5,11 +5,8 @@ import sys
 import signal
 import asyncio
 from datetime import datetime
-from aiohttp import web
 
-# استيراد مكتبات قاعدة البيانات 
 import asyncpg
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     Application,
@@ -27,7 +24,6 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
 PORT = int(os.getenv("PORT", 8080))
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
-API_URL_PATH = "/api"
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -57,7 +53,7 @@ RANKS = [
     (0, "زائر جديد 🌱")
 ]
 
-# ============= مدير الطلبات (باستخدام PostgreSQL) =============
+# ============= مدير الطلبات =============
 class OrderManager:
     def __init__(self):
         self.pool = None
@@ -65,14 +61,14 @@ class OrderManager:
     async def connect(self):
         DATABASE_URL = os.getenv("DATABASE_URL")
         if not DATABASE_URL:
-            logger.error("❌ متغير DATABASE_URL غير موجود. تأكد من تعيينه في Railway!")
+            logger.error("❌ DATABASE_URL غير موجود")
             sys.exit(1)
         try:
             self.pool = await asyncpg.create_pool(DATABASE_URL)
-            logger.info("✅ تم الاتصال بقاعدة بيانات PostgreSQL بنجاح!")
+            logger.info("✅ اتصال PostgreSQL")
             await self.create_table()
         except Exception as e:
-            logger.error(f"❌ فشل الاتصال بقاعدة البيانات: {e}")
+            logger.error(f"❌ فشل DB: {e}")
             sys.exit(1)
 
     async def create_table(self):
@@ -84,11 +80,12 @@ class OrderManager:
                 rank TEXT
             )
         ''')
-        logger.info("✅ تم التأكد من وجود جدول users.")
+        logger.info("✅ جدول users جاهز")
 
     async def get_user_data(self, user_id):
         row = await self.pool.fetchrow(
-            "SELECT total_spent, order_count, rank FROM users WHERE id = $1", int(user_id)
+            "SELECT total_spent, order_count, rank FROM users WHERE id = $1", 
+            int(user_id)
         )
         if row:
             return {
@@ -117,71 +114,30 @@ class OrderManager:
             INSERT INTO users (id, total_spent, order_count, rank)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (id) 
-            DO UPDATE SET total_spent = users.total_spent + $2, 
-                          order_count = users.order_count + 1,
-                          rank = $4
+            DO UPDATE SET 
+                total_spent = users.total_spent + $2, 
+                order_count = users.order_count + 1,
+                rank = $4
             """,
             int(user_id), amount, new_rank
         )
-        logger.info(f"✅ طلب جديد وحفظ في DB: {user_id} - {category} - {amount}")
+        logger.info(f"✅ حفظ: {user_id} - {category} - {amount}")
         return new_total, total_spent
 
 order_manager = OrderManager()
 
-# ============= API Routes =============
-async def api_get_user_data(request):
-    """API endpoint للحصول على بيانات المستخدم"""
-    try:
-        user_id = request.query.get('userId')
-        
-        if not user_id:
-            return web.json_response(
-                {"error": "userId is required"},
-                status=400,
-                headers={"Access-Control-Allow-Origin": "*"}
-            )
-        
-        data = await order_manager.get_user_data(user_id)
-        
-        logger.info(f"📊 API: بيانات المستخدم {user_id}")
-        
-        return web.json_response(
-            data,
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ API Error: {e}")
-        return web.json_response(
-            {"error": str(e)},
-            status=500,
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
-
-async def api_options_handler(request):
-    """معالج CORS preflight"""
-    return web.Response(
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type"
-        }
-    )
-
-# ============= دوال البوت ومعالجاته =============
+# ============= دوال مساعدة =============
 def get_rank(total):
-    """الحصول على اللقب بناءً على إجمالي الإنفاق"""
     for threshold, title in RANKS:
         if total >= threshold:
             return title
     return RANKS[-1][1]
 
 def validate_price(category, amount):
-    """التحقق من صحة الفئة والسعر"""
     return category in PRICES and amount in PRICES[category]
 
+# ============= معالجات البوت =============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج أمر /start"""
     user = update.message.from_user
     user_id = user.id
     
@@ -190,7 +146,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = data['orderCount']
     rank = data['rank']
     
-    keyboard = [[InlineKeyboardButton("🛍️ افتح المتجر", web_app=WebAppInfo(url=WEB_APP_URL))]]
+    keyboard = [[InlineKeyboardButton(
+        "🛍️ افتح المتجر", 
+        web_app=WebAppInfo(url=WEB_APP_URL)
+    )]]
     
     await update.message.reply_text(
         f"🌟 متجر اللاشيء 🌟\n\n"
@@ -201,17 +160,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"اضغط الزر للدخول إلى المتجر",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    logger.info(f"👤 دخول: {user.id} - {user.first_name}")
+    logger.info(f"👤 {user.id} - {user.first_name}")
 
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user = update.message.from_user
         raw_data = update.message.web_app_data.data
         
-        logger.info(f"📥 بيانات من: {user.id}")
+        logger.info(f"📥 من: {user.id}")
         
         data = json.loads(raw_data)
         action = data.get('action')
+        
+        if action == 'getUserData':
+            user_data = await order_manager.get_user_data(user.id)
+            await update.message.reply_text(
+                f"📊 بياناتك:\n"
+                f"💰 {user_data['totalSpent']:,} ⭐\n"
+                f"📦 {user_data['orderCount']} طلب\n"
+                f"🏷️ {user_data['rank']}"
+            )
+            return
         
         if action != 'buy':
             await update.message.reply_text("❌ عملية غير صحيحة")
@@ -221,7 +190,9 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         amount = int(data.get('amount', 0))
         
         if not validate_price(category, amount):
-            await update.message.reply_text(f"❌ بيانات غير صالحة: {category} - {amount:,} ⭐")
+            await update.message.reply_text(
+                f"❌ بيانات خاطئة: {category} - {amount:,} ⭐"
+            )
             return
         
         product = PRODUCTS[category]
@@ -240,18 +211,19 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         logger.info(f"📄 فاتورة: {product['name']} - {amount:,} ⭐")
         
+    except json.JSONDecodeError:
+        logger.error("❌ JSON خاطئ")
+        await update.message.reply_text("❌ بيانات غير صالحة")
     except Exception as e:
-        logger.error(f"❌ خطأ في معالج WebApp: {e}", exc_info=True)
-        await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
+        logger.error(f"❌ خطأ WebApp: {e}", exc_info=True)
+        await update.message.reply_text("❌ حدث خطأ")
 
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """التحقق قبل الدفع"""
     query = update.pre_checkout_query
     await query.answer(ok=True)
     logger.info(f"✅ تحقق: {query.from_user.id}")
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج الدفع الناجح"""
     user = update.message.from_user
     payment = update.message.successful_payment
     
@@ -263,7 +235,11 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨"})
     
-    new_total, old_total = await order_manager.add_order(user.id, payment.total_amount, category)
+    new_total, old_total = await order_manager.add_order(
+        user.id, 
+        payment.total_amount, 
+        category
+    )
     
     old_rank = get_rank(old_total)
     new_rank = get_rank(new_total)
@@ -273,62 +249,77 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         rank_up = f"\n\n🎊 ترقية!\n{old_rank} ➜ {new_rank}"
     
     await update.message.reply_text(
-        f"✅ تم الدفع بنجاح!\n\n"
+        f"✅ تم الدفع!\n\n"
         f"📦 {product['emoji']} {product['name']}\n"
         f"💰 {payment.total_amount:,} ⭐\n"
-        f"🏷️ لقبك: {new_rank}\n"
+        f"🏷️ {new_rank}\n"
         f"💎 الإجمالي: {new_total:,} ⭐{rank_up}\n"
         f"شكراً لك ❤️"
     )
     
-    logger.info(f"💳 دفع ناجح وحفظ DB: {user.id} - {payment.total_amount:,} ⭐")
+    logger.info(f"💳 دفع: {user.id} - {payment.total_amount:,} ⭐")
     
     if ADMIN_ID:
         try:
             await context.bot.send_message(
                 ADMIN_ID,
-                f"📢 طلب جديد!\n\n"
+                f"📢 طلب جديد\n\n"
                 f"👤 {user.first_name}\n"
                 f"🆔 {user.id}\n"
                 f"📦 {product['name']}\n"
                 f"💰 {payment.total_amount:,} ⭐\n"
                 f"🏷️ {new_rank}"
             )
+        except Exception as e:
+            logger.error(f"❌ فشل إرسال للأدمن: {e}")
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"❌ خطأ: {context.error}", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "❌ حدث خطأ. حاول مرة أخرى."
+            )
         except:
             pass
 
-# ============= التهيئة والإغلاق الآمن =============
+# ============= التهيئة =============
 async def post_init(application):
-    """بعد التهيئة"""
     await order_manager.connect()
-    
     bot = await application.bot.get_me()
     logger.info(f"✅ البوت: @{bot.username}")
     logger.info(f"🌐 WebApp: {WEB_APP_URL}")
 
 async def pre_shutdown(application):
-    """قبل الإغلاق"""
     if order_manager.pool:
         await order_manager.pool.close()
-        logger.info("✅ تم إغلاق اتصال PostgreSQL")
+        logger.info("✅ إغلاق PostgreSQL")
 
 # ============= التشغيل =============
 def main():
-    """الدالة الرئيسية"""
-    
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
-        logger.error("❌ BOT_TOKEN غير صحيح")
+        logger.error("❌ BOT_TOKEN خاطئ")
         sys.exit(1)
     
     logger.info("🚀 تشغيل البوت...")
     
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).post_shutdown(pre_shutdown).build()
+    app = (Application.builder()
+           .token(BOT_TOKEN)
+           .post_init(post_init)
+           .post_shutdown(pre_shutdown)
+           .build())
     
-    app.add_error_handler(lambda u, c: logger.error(f"❌ خطأ: {c.error}"))
+    app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
+    app.add_handler(MessageHandler(
+        filters.StatusUpdate.WEB_APP_DATA, 
+        handle_web_app_data
+    ))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    app.add_handler(MessageHandler(
+        filters.SUCCESSFUL_PAYMENT, 
+        successful_payment
+    ))
     
     try:
         loop = asyncio.get_event_loop()
@@ -337,27 +328,18 @@ def main():
         asyncio.set_event_loop(loop)
     
     async def cleanup_webhook():
-        """تنظيف Webhook قبل البدء"""
         try:
             await app.bot.delete_webhook(drop_pending_updates=True)
-            logger.info("🧹 تم حذف Webhook السابق")
+            logger.info("🧹 حذف webhook سابق")
             await asyncio.sleep(2)
         except Exception as e:
-            logger.error(f"خطأ في التنظيف: {e}")
+            logger.error(f"خطأ تنظيف: {e}")
     
     loop.run_until_complete(cleanup_webhook())
 
     if WEBHOOK_URL:
-        logger.info(f"🌐 Webhook Mode")
-        logger.info(f"📍 Webhook URL: {WEBHOOK_URL}")
-        
-        # إضافة API routes إلى webhook server
-        async def setup_routes(application):
-            """إعداد routes للـ API"""
-            web_app = application.web_app
-            web_app.router.add_get(API_URL_PATH, api_get_user_data)
-            web_app.router.add_options(API_URL_PATH, api_options_handler)
-            logger.info(f"✅ API Routes مضافة على: {API_URL_PATH}")
+        logger.info("🌐 Webhook Mode")
+        logger.info(f"📍 {WEBHOOK_URL}")
         
         app.run_webhook(
             listen="0.0.0.0",
@@ -365,19 +347,17 @@ def main():
             url_path=BOT_TOKEN,
             webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
             drop_pending_updates=True,
-            allowed_updates=["message", "pre_checkout_query"],
-            ready=setup_routes
+            allowed_updates=["message", "pre_checkout_query"]
         )
     else:
         logger.info("📡 Polling Mode")
-        logger.info("❌ ملاحظة: يجب تعيين WEBHOOK_URL لعمل الـ API")
         
         def signal_handler(sig, frame):
-            logger.info("🛑 إشارة إيقاف...")
-            async def shutdown_async():
+            logger.info("🛑 إيقاف...")
+            async def shutdown():
                 await app.shutdown()
                 await pre_shutdown(app)
-            loop.run_until_complete(shutdown_async())
+            loop.run_until_complete(shutdown())
             sys.exit(0)
         
         signal.signal(signal.SIGINT, signal_handler)
@@ -390,10 +370,10 @@ def main():
                 close_loop=False
             )
         except KeyboardInterrupt:
-            logger.info("🛑 توقف بواسطة المستخدم")
+            logger.info("🛑 توقف")
             loop.run_until_complete(pre_shutdown(app))
         except Exception as e:
-            logger.error(f"❌ خطأ خطير: {e}")
+            logger.error(f"❌ خطأ: {e}")
             loop.run_until_complete(pre_shutdown(app))
         finally:
             loop.close()
