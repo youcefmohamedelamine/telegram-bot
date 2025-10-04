@@ -27,6 +27,7 @@ ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
 # المنفذ الذي سيستمع إليه الخادم
 PORT = int(os.getenv("PORT", 8080))
+API_PORT = int(os.getenv("API_PORT", 8081)) # 👈 أضف هذا السطر
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
 # رابط الـ API الذي يستخدمه تطبيق الويب المصغر (WebApp)
