@@ -423,19 +423,14 @@
                 tg.HapticFeedback.impactOccurred('medium');
             }
             
-            // إرسال البيانات للبوت عبر deep link
-            const botUsername = tg.initDataUnsafe?.user?.username || 'YourBotUsername';
-            const deepLink = `https://t.me/${window.location.hostname.includes('github') ? 'YourBotUsername' : 'bot'}?start=buy_${category}_${amount}`;
+            // الحصول على معلومات البوت
+            const botUsername = 'WinterLand_bot'; // استبدلها باسم البوت بتاعك
             
-            // إغلاق الويب أب والرجوع للبوت مع الأمر
-            tg.close();
+            // إنشاء deep link للبوت
+            const deepLink = `https://t.me/${botUsername}?start=buy_${category}_${amount}`;
             
-            // بديل: إرسال البيانات عبر sendData (يتطلب تفعيل في البوت)
-            tg.sendData(JSON.stringify({
-                action: 'buy',
-                category: category,
-                amount: amount
-            }));
+            // فتح الرابط في نفس النافذة (هيرجع للبوت)
+            tg.openLink(deepLink);
         }
         
         window.addEventListener('load', function() {
