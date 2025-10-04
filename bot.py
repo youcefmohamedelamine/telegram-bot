@@ -416,7 +416,19 @@ def main():
         logger.error("❌ BOT_TOKEN غير موجود! ضعه في متغيرات البيئة")
         return
     
+    # إنشاء التطبيق مع إعدادات محسّنة
     app = Application.builder().token(BOT_TOKEN).build()
+    
+    # حذف أي webhook موجود
+    import asyncio
+    async def delete_webhook():
+        try:
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ تم حذف الـ Webhook")
+        except Exception as e:
+            logger.warning(f"⚠️ خطأ في حذف الـ Webhook: {e}")
+    
+    asyncio.run(delete_webhook())
     
     # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
@@ -431,7 +443,16 @@ def main():
     logger.info("🚀 البوت يعمل الآن...")
     logger.info(f"📁 ملف الطلبات: {ORDERS_FILE}")
     
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # تشغيل البوت مع معالجة الأخطاء
+    try:
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False
+        )
+    except Exception as e:
+        logger.error(f"❌ خطأ في تشغيل البوت: {e}")
+        logger.info("💡 تأكد من عدم وجود نسخة أخرى من البوت تعمل")
 
 if __name__ == "__main__":
     main()
