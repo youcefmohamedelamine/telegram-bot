@@ -22,7 +22,7 @@ from telegram.error import TelegramError, NetworkError, TimedOut, BadRequest
 # ============= إعدادات البيئة =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
-PROVIDER_TOKEN = ""
+PROVIDER_TOKEN = "XTR"
 ORDERS_FILE = "orders.json"
 ORDERS_BACKUP = "orders_backup.json"
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
