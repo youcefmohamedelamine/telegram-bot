@@ -163,42 +163,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"👤 {user.id} - {user.first_name}")
 
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالج بيانات WebApp - هذا هو المعالج الحاسم!"""
     try:
-        user = update.message.from_user
-        raw_data = update.message.web_app_data.data
+        user = update.effective_user
         
-        logger.info(f"📥 من: {user.id}")
+        # التحقق من وجود البيانات
+        if not update.effective_message.web_app_data:
+            logger.error("❌ لا توجد web_app_data")
+            return
+            
+        raw_data = update.effective_message.web_app_data.data
+        logger.info(f"📥 استلام من: {user.id}")
+        logger.info(f"📦 البيانات: {raw_data}")
         
+        # تحليل البيانات
         data = json.loads(raw_data)
         action = data.get('action')
         
-        if action == 'getUserData':
-            user_data = await order_manager.get_user_data(user.id)
-            await update.message.reply_text(
-                f"📊 بياناتك:\n"
-                f"💰 {user_data['totalSpent']:,} ⭐\n"
-                f"📦 {user_data['orderCount']} طلب\n"
-                f"🏷️ {user_data['rank']}"
-            )
-            return
-        
         if action != 'buy':
-            await update.message.reply_text("❌ عملية غير صحيحة")
+            await update.effective_message.reply_text("❌ عملية غير معروفة")
+            logger.warning(f"⚠️ عملية غير معروفة: {action}")
             return
         
         category = data.get('category')
         amount = int(data.get('amount', 0))
         
+        logger.info(f"🛒 طلب شراء: {category} - {amount}")
+        
+        # التحقق من صحة البيانات
         if not validate_price(category, amount):
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 f"❌ بيانات خاطئة: {category} - {amount:,} ⭐"
             )
+            logger.warning(f"⚠️ بيانات خاطئة: {category} - {amount}")
             return
         
+        # جلب معلومات المنتج
         product = PRODUCTS[category]
         payload = f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}"
         
-        await update.message.reply_invoice(
+        # إرسال الفاتورة
+        await update.effective_message.reply_invoice(
             title=f"{product['emoji']} {product['name']}",
             description=f"✨ {product['desc']}",
             payload=payload,
@@ -209,14 +214,14 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             suggested_tip_amounts=[1000, 5000, 10000, 25000]
         )
         
-        logger.info(f"📄 فاتورة: {product['name']} - {amount:,} ⭐")
+        logger.info(f"📄 فاتورة مرسلة: {product['name']} - {amount:,} ⭐")
         
-    except json.JSONDecodeError:
-        logger.error("❌ JSON خاطئ")
-        await update.message.reply_text("❌ بيانات غير صالحة")
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON خاطئ: {e}")
+        await update.effective_message.reply_text("❌ بيانات غير صالحة")
     except Exception as e:
         logger.error(f"❌ خطأ WebApp: {e}", exc_info=True)
-        await update.message.reply_text("❌ حدث خطأ")
+        await update.effective_message.reply_text("❌ حدث خطأ")
 
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
@@ -224,12 +229,12 @@ async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"✅ تحقق: {query.from_user.id}")
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    payment = update.message.successful_payment
+    user = update.effective_user
+    payment = update.effective_message.successful_payment
     
     try:
         parts = payment.invoice_payload.split("_")
-        category = parts[2]
+        category = parts[2] if len(parts) > 2 else "unknown"
     except:
         category = "unknown"
     
@@ -248,7 +253,7 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if old_rank != new_rank:
         rank_up = f"\n\n🎊 ترقية!\n{old_rank} ➜ {new_rank}"
     
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         f"✅ تم الدفع!\n\n"
         f"📦 {product['emoji']} {product['name']}\n"
         f"💰 {payment.total_amount:,} ⭐\n"
@@ -275,13 +280,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"❌ خطأ: {context.error}", exc_info=context.error)
-    if isinstance(update, Update) and update.effective_message:
-        try:
-            await update.effective_message.reply_text(
-                "❌ حدث خطأ. حاول مرة أخرى."
-            )
-        except:
-            pass
 
 # ============= التهيئة =============
 async def post_init(application):
@@ -311,10 +309,13 @@ def main():
     
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
+    
+    # ✨ المعالج الأهم - يجب أن يكون قبل معالج الدفع
     app.add_handler(MessageHandler(
         filters.StatusUpdate.WEB_APP_DATA, 
         handle_web_app_data
     ))
+    
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(
         filters.SUCCESSFUL_PAYMENT, 
