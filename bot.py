@@ -5,13 +5,17 @@ import sys
 import signal
 import asyncio
 from datetime import datetime
-
-# استيراد مكتبات قاعدة البيانات 
 import asyncpg
-# تم إزالة: from aiohttp import web
-
+from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import (Application,CommandHandler,ContextTypes,PreCheckoutQueryHandler,MessageHandler,filters)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    PreCheckoutQueryHandler,
+    MessageHandler,
+    filters
+)
 
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
@@ -20,7 +24,7 @@ ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
 # المنفذ الذي سيستمع إليه الخادم
 PORT = int(os.getenv("PORT", 8080))
-# تم إزالة: API_PORT = int(os.getenv("API_PORT", 8081))
+API_PORT = int(os.getenv("API_PORT", 8081)) # 👈 أضف هذا السطر
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
 # رابط الـ API الذي يستخدمه تطبيق الويب المصغر (WebApp)
@@ -135,9 +139,37 @@ class OrderManager:
 
 order_manager = OrderManager()
 
-# ============= دوال الـ API (لخدمة WebApp) (تم حذفها) =============
-# دوال api_get_user و api_buy تم حذفها لأنها تستخدم aiohttp
-# الذي لا يتوافق مع خادم الـ Webhook في نفس العملية/المنفذ.
+# ============= دوال الـ API (لخدمة WebApp) =============
+async def api_get_user(request):
+    """مسار GET /api/user/{user_id}"""
+    try:
+        user_id = request.match_info['user_id']
+        data = await order_manager.get_user_data(user_id)
+        
+        return web.json_response({
+            "totalSpent": data['totalSpent'],
+            "orderCount": data['orderCount'],
+            "rank": data['rank']
+        })
+    except Exception as e:
+        logger.error(f"❌ خطأ في API جلب المستخدم: {e}")
+        return web.json_response({"error": "فشل جلب البيانات"}, status=500)
+
+async def api_buy(request):
+    """مسار POST /api/buy (لإرسال البيانات إلى البوت)"""
+    # هذا المسار يستخدم فقط لتأكيد أن الخادم يعمل ولا يقوم بشيء فعلي للشراء
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        
+        if not user_id:
+            return web.json_response({"error": "بيانات غير كاملة"}, status=400)
+
+        return web.json_response({"status": "ok", "message": "تم إرسال الطلب، البوت سيعالجه"})
+        
+    except Exception as e:
+        logger.error(f"❌ خطأ في API الشراء: {e}")
+        return web.json_response({"error": "فشل معالجة الطلب"}, status=500)
 
 # ============= دوال البوت ومعالجاته =============
 def get_rank(total):
@@ -269,11 +301,35 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except:
             pass
 
-# ============= تشغيل خادم الـ API مع البوت (Web App Server) (تم حذف هذه الجزئية) =============
+# ============= تشغيل خادم الـ API مع البوت (Web App Server) =============
 
-# تم إزالة: api_server_runner = None 
-# تم إزالة: async def start_api_server(application: Application):
-# تم إزالة: async def shutdown_api_server():
+# متغير لتخزين خادم aiohttp
+api_server_runner = None 
+
+async def start_api_server(application: Application):
+    """دالة لتهيئة خادم الـ API"""
+    global api_server_runner
+    
+    api_app = web.Application()
+    api_app.router.add_get(f"{API_URL_PATH}/user/{{user_id}}", api_get_user)
+    api_app.router.add_post(f"{API_URL_PATH}/buy", api_buy)
+    
+    api_server_runner = web.AppRunner(api_app)
+    await api_server_runner.setup()
+    
+    site = web.TCPSite(api_server_runner, '0.0.0.0', API_PORT)
+    await site.start()
+    
+    logger.info(f"✅ خادم الـ API يعمل على المنفذ: {PORT}")
+
+
+async def shutdown_api_server():
+    """إغلاق خادم الـ API بأمان"""
+    global api_server_runner
+    if api_server_runner:
+        logger.info("🛑 جاري إيقاف خادم الـ API...")
+        await api_server_runner.cleanup()
+        logger.info("✅ تم إيقاف خادم الـ API")
 
 # ============= التهيئة والإغلاق الآمن =============
 
@@ -284,15 +340,14 @@ async def post_init(application):
     bot = await application.bot.get_me()
     logger.info(f"✅ البوت: @{bot.username}")
     
-    # تم إزالة شرط تشغيل خادم API المنفصل
-    # if WEBHOOK_URL:
-    # await start_api_server(application)
+    if WEBHOOK_URL:
+        await start_api_server(application)
     
     logger.info(f"🌐 WebApp: {WEB_APP_URL}")
 
 async def pre_shutdown(application):
     """قبل الإغلاق"""
-    # تم إزالة: await shutdown_api_server()
+    await shutdown_api_server()
     if order_manager.pool:
         await order_manager.pool.close()
         logger.info("✅ تم إغلاق اتصال PostgreSQL")
