@@ -205,12 +205,6 @@
             border: 2px solid rgba(255, 0, 0, 0.5);
         }
         
-        .loading {
-            text-align: center;
-            padding: 30px;
-            font-size: 1.2em;
-        }
-        
         @keyframes fadeInDown {
             from {
                 opacity: 0;
@@ -317,29 +311,6 @@
     <script>
         const tg = window.Telegram.WebApp;
         let processing = false;
-        // استبدال الرابط القديم بهذا الرابط الجديد
-        const API_URL = 'https://winterlandbot-production.up.railway.app/api';
-
-        // نظام الرتب
-        const RANKS = [
-            { min: 500000, title: 'إمبراطور العدم 👑' },
-            { min: 300000, title: 'ملك اللاشيء 💎' },
-            { min: 200000, title: 'أمير الفراغ 🏆' },
-            { min: 100000, title: 'نبيل العدم ⭐' },
-            { min: 50000, title: 'فارس اللاشيء 🌟' },
-            { min: 20000, title: 'تاجر العدم ✨' },
-            { min: 10000, title: 'مبتدئ اللاشيء 🎯' },
-            { min: 0, title: 'زائر جديد 🌱' }
-        ];
-
-        function getRank(totalSpent) {
-            for (let rank of RANKS) {
-                if (totalSpent >= rank.min) {
-                    return rank.title;
-                }
-            }
-            return RANKS[RANKS.length - 1].title;
-        }
 
         function showMessage(text, type) {
             const msg = document.getElementById('message');
@@ -348,37 +319,14 @@
             setTimeout(() => msg.classList.remove('show'), 3000);
         }
 
-        function formatNumber(num) {
-            return parseInt(num || 0).toLocaleString('ar-EG');
-        }
-
-        // تحميل بيانات المستخدم من الـ API
-        async function loadUserData() {
-            try {
-                const user = tg.initDataUnsafe?.user;
-                if (!user) {
-                    showMessage('❌ لا يمكن الوصول إلى بيانات المستخدم', 'error');
-                    return;
-                }
-
+        // تحميل بيانات المستخدم (بدون API)
+        function loadUserData() {
+            const user = tg.initDataUnsafe?.user;
+            if (user) {
                 document.getElementById('userName').textContent = user.first_name || 'مرحباً';
-                const userId = user.id;
-
-                const response = await fetch(`${API_URL}/user/${userId}`);
-                if (!response.ok) throw new Error('فشل جلب البيانات');
-                const data = await response.json();
-                updateStats(data);
-            } catch (e) {
-                console.error('❌ خطأ في تحميل البيانات:', e);
-                showMessage('❌ فشل تحميل البيانات', 'error');
             }
-        }
-
-        // تحديث الإحصائيات على الشاشة
-        function updateStats(data) {
-            document.getElementById('totalSpent').textContent = formatNumber(data.totalSpent);
-            document.getElementById('orderCount').textContent = formatNumber(data.orderCount);
-            document.getElementById('userRank').textContent = data.rank || getRank(data.totalSpent);
+            // البيانات ستبقى 0 حتى يتم الشراء
+            // البوت سيرسل التحديثات بعد كل عملية شراء
         }
 
         // دالة الشراء
@@ -397,25 +345,16 @@
                     tg.HapticFeedback.impactOccurred('medium');
                 }
 
-                const user = tg.initDataUnsafe?.user;
-                if (!user) {
-                    throw new Error('لا يوجد بيانات مستخدم');
-                }
-
-                const response = await fetch(`${API_URL}/buy`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: user.id, category, amount })
+                // إرسال البيانات مباشرة إلى البوت
+                const data = JSON.stringify({ 
+                    action: 'buy', 
+                    category, 
+                    amount 
                 });
-
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error || 'فشل الشراء');
-
-                // إرسال البيانات إلى البوت
-                const data = JSON.stringify({ action: 'buy', category, amount });
+                
                 tg.sendData(data);
-
                 showMessage('✅ تم إرسال الطلب!', 'success');
+                
             } catch (e) {
                 console.error('❌ خطأ في الشراء:', e);
                 showMessage('❌ فشل إرسال الطلب', 'error');
@@ -426,27 +365,6 @@
                 }, 2000);
             }
         }
-
-        // الاستماع لأحداث تيليجرام
-        tg.onEvent('invoiceClosed', async function(obj) {
-            try {
-                const user = tg.initDataUnsafe?.user;
-                if (!user) return;
-
-                if (obj.status === 'paid') {
-                    showMessage('🎉 تم الدفع بنجاح!', 'success');
-                    // تحديث البيانات عبر الـ API (يفترض أن البوت يحدث السيرفر)
-                    await loadUserData();
-                } else if (obj.status === 'cancelled') {
-                    showMessage('❌ تم إلغاء الدفع', 'error');
-                } else if (obj.status === 'failed') {
-                    showMessage('❌ فشل الدفع', 'error');
-                }
-            } catch (e) {
-                console.error('❌ خطأ في معالجة الفاتورة:', e);
-                showMessage('❌ خطأ في معالجة الفاتورة', 'error');
-            }
-        });
 
         // تهيئة التطبيق
         tg.ready();
@@ -463,11 +381,7 @@
         loadUserData();
 
         console.log('✅ التطبيق جاهز');
-        console.log('🔗 InitData:', tg.initData ? 'موجود ✓' : 'غير موجود ✗');
         console.log('👤 المستخدم:', tg.initDataUnsafe?.user);
-
-        // تحديث البيانات عند العودة
-        window.addEventListener('focus', loadUserData);
     </script>
 </body>
 </html>
