@@ -822,29 +822,6 @@ def main():
             loop.run_until_complete(pre_shutdown(app))
         finally:
             loop.close()
-            
-async def test_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """اختبار الفاتورة مباشرة"""
-    user = update.message.from_user
-    
-    await update.message.reply_invoice(
-        title="🔹 اختبار",
-        description="اختبار الدفع بالنجوم",
-        payload=f"test_{user.id}_{int(datetime.now().timestamp())}",
-        provider_token="",
-        currency="XTR",
-        prices=[{'label': "السعر", 'amount': 5000}]
-    )
-    logger.info(f"📄 [{user.id}] فاتورة اختبار")
-
-# في main() أضف:
-app.add_handler(CommandHandler("invoice", test_invoice))
-
-
-
-
-
-
 if __name__ == "__main__":
     main()
 
