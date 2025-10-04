@@ -11,14 +11,7 @@ import asyncpg
 # تم إزالة: from aiohttp import web
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    ContextTypes,
-    PreCheckoutQueryHandler,
-    MessageHandler,
-    filters
-)
+from telegram.ext import (Application,CommandHandler,ContextTypes,PreCheckoutQueryHandler,MessageHandler,filters)
 
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
