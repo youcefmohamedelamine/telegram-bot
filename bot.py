@@ -39,7 +39,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============= البيانات والمصفوفات (لم تتغير) =============
-# ... (باقي تعريفات PRODUCTS, PRICES, RANKS) ...
 
 PRODUCTS = {
     "small": {"name": "لاشيء صغير", "emoji": "🔹", "desc": "مثالي للمبتدئين"},
@@ -70,7 +69,6 @@ class OrderManager:
         self.pool = None
     
     async def connect(self):
-        # استخدم متغرات البيئة التي وفرتها Railway للاتصال
         try:
             self.pool = await asyncpg.create_pool(
                 user=os.getenv("PGUSER"),
@@ -83,11 +81,9 @@ class OrderManager:
             await self.create_table()
         except Exception as e:
             logger.error(f"❌ فشل الاتصال بقاعدة البيانات: {e}")
-            # قد تحتاج لإيقاف التطبيق إذا فشل الاتصال بالقاعدة
             sys.exit(1)
 
     async def create_table(self):
-        # الجدول الذي أنشأته مسبقاً
         await self.pool.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id BIGINT PRIMARY KEY,
@@ -99,7 +95,6 @@ class OrderManager:
         logger.info("✅ تم التأكد من وجود جدول users.")
 
     async def get_user_data(self, user_id):
-        # جلب بيانات المستخدم أو إنشاء سجل جديد إذا لم يكن موجوداً
         row = await self.pool.fetchrow(
             "SELECT total_spent, order_count, rank FROM users WHERE id = $1", int(user_id)
         )
@@ -110,7 +105,6 @@ class OrderManager:
                 "rank": row['rank']
             }
         
-        # إذا كان المستخدم جديداً، قم بإنشاء سجل له
         initial_rank = get_rank(0)
         await self.pool.execute(
             "INSERT INTO users (id, total_spent, order_count, rank) VALUES ($1, $2, $3, $4)",
@@ -120,7 +114,6 @@ class OrderManager:
 
 
     async def add_order(self, user_id, amount, category):
-        # تحديث بيانات المستخدم بعد الدفع الناجح
         total_spent = await self.pool.fetchval(
             "SELECT total_spent FROM users WHERE id = $1", int(user_id)
         ) or 0
@@ -140,7 +133,7 @@ class OrderManager:
             int(user_id), amount, new_rank
         )
         logger.info(f"✅ طلب جديد وحفظ في DB: {user_id} - {category} - {amount}")
-        return new_total, total_spent # لإرجاع البيانات للـ WebApp
+        return new_total, total_spent
 
 order_manager = OrderManager()
 
@@ -151,7 +144,6 @@ async def api_get_user(request):
         user_id = request.match_info['user_id']
         data = await order_manager.get_user_data(user_id)
         
-        # يجب أن يكون الرد متوافقاً مع توقعات ملف HTML
         return web.json_response({
             "totalSpent": data['totalSpent'],
             "orderCount": data['orderCount'],
@@ -163,26 +155,21 @@ async def api_get_user(request):
 
 async def api_buy(request):
     """مسار POST /api/buy (لإرسال البيانات إلى البوت)"""
+    # هذا المسار يستخدم فقط لتأكيد أن الخادم يعمل ولا يقوم بشيء فعلي للشراء
     try:
         data = await request.json()
         user_id = data.get('userId')
-        category = data.get('category')
-        amount = data.get('amount')
         
-        # الكود الخلفي لا يحتاج لحفظ الطلب هنا، فقط يؤكد أن البوت سيعالجه
-        if not user_id or not category or not amount:
+        if not user_id:
             return web.json_response({"error": "بيانات غير كاملة"}, status=400)
 
-        # في حالتنا، سنستخدم هذه النقطة فقط لتأكيد أن الخادم يعمل
         return web.json_response({"status": "ok", "message": "تم إرسال الطلب، البوت سيعالجه"})
         
     except Exception as e:
         logger.error(f"❌ خطأ في API الشراء: {e}")
         return web.json_response({"error": "فشل معالجة الطلب"}, status=500)
 
-# ============= دوال البوت ومعالجاته (تم تحديثها) =============
-# ... (دوال get_rank و validate_price لم تتغير) ...
-
+# ============= دوال البوت ومعالجاته =============
 def get_rank(total):
     """الحصول على اللقب بناءً على إجمالي الإنفاق"""
     for threshold, title in RANKS:
@@ -195,11 +182,10 @@ def validate_price(category, amount):
     return category in PRICES and amount in PRICES[category]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج أمر /start (تم تعديله لاستخدام DB)"""
+    """معالج أمر /start"""
     user = update.message.from_user
     user_id = user.id
     
-    # جلب البيانات من PostgreSQL
     data = await order_manager.get_user_data(user_id)
     total = data['totalSpent']
     count = data['orderCount']
@@ -219,8 +205,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"👤 دخول: {user.id} - {user.first_name}")
 
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... (لم يتم تغيير هذه الدالة بشكل جوهري) ...
-    # ... (تستطيع استخدامها كما هي لتوليد الفاتورة) ...
     try:
         user = update.message.from_user
         raw_data = update.message.web_app_data.data
@@ -261,9 +245,14 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"❌ خطأ في معالج WebApp: {e}", exc_info=True)
         await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
 
+async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التحقق قبل الدفع"""
+    query = update.pre_checkout_query
+    await query.answer(ok=True)
+    logger.info(f"✅ تحقق: {query.from_user.id}")
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج الدفع الناجح (تم تعديله لاستخدام DB)"""
+    """معالج الدفع الناجح"""
     user = update.message.from_user
     payment = update.message.successful_payment
     
@@ -278,7 +267,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # حفظ الطلب وتحديث الإجمالي في PostgreSQL
     new_total, old_total = await order_manager.add_order(user.id, payment.total_amount, category)
     
-    # حساب اللقب
     old_rank = get_rank(old_total)
     new_rank = get_rank(new_total)
     
@@ -289,15 +277,14 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(
         f"✅ تم الدفع بنجاح!\n\n"
         f"📦 {product['emoji']} {product['name']}\n"
-        f"💰 {payment.total_amount:,} ⭐\n\n"
+        f"💰 {payment.total_amount:,} ⭐\n"
         f"🏷️ لقبك: {new_rank}\n"
-        f"💎 الإجمالي: {new_total:,} ⭐{rank_up}\n\n"
+        f"💎 الإجمالي: {new_total:,} ⭐{rank_up}\n"
         f"شكراً لك ❤️"
     )
     
     logger.info(f"💳 دفع ناجح وحفظ DB: {user.id} - {payment.total_amount:,} ⭐")
     
-    # ... (بقية كود إشعار الأدمن) ...
     if ADMIN_ID:
         try:
             await context.bot.send_message(
@@ -314,41 +301,56 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ============= تشغيل خادم الـ API مع البوت (Web App Server) =============
 
-async def start_api_server(app: Application):
+# متغير لتخزين خادم aiohttp
+api_server_runner = None 
+
+async def start_api_server(application: Application):
     """دالة لتهيئة خادم الـ API"""
+    global api_server_runner
     
-    # تهيئة مسارات الـ API
     api_app = web.Application()
     api_app.router.add_get(f"{API_URL_PATH}/user/{{user_id}}", api_get_user)
-    # مسار الشراء في الـ API لا يقوم بالشراء الفعلي، بل يمرر البيانات للبوت
-    api_app.router.add_post(f"{API_URL_PATH}/buy", api_buy) 
+    api_app.router.add_post(f"{API_URL_PATH}/buy", api_buy)
     
-    # تهيئة خادم aiohttp
-    runner = web.AppRunner(api_app)
-    await runner.setup()
+    api_server_runner = web.AppRunner(api_app)
+    await api_server_runner.setup()
     
-    # تشغيل الخادم على المنفذ المحدد
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    site = web.TCPSite(api_server_runner, '0.0.0.0', PORT)
     await site.start()
     
     logger.info(f"✅ خادم الـ API يعمل على المنفذ: {PORT}")
 
-# ============= التهيئة النهائية والتشغيل =============
+
+async def shutdown_api_server():
+    """إغلاق خادم الـ API بأمان"""
+    global api_server_runner
+    if api_server_runner:
+        logger.info("🛑 جاري إيقاف خادم الـ API...")
+        await api_server_runner.cleanup()
+        logger.info("✅ تم إيقاف خادم الـ API")
+
+# ============= التهيئة والإغلاق الآمن =============
 
 async def post_init(application):
     """بعد التهيئة"""
-    await order_manager.connect() # الاتصال بقاعدة البيانات أولاً
+    await order_manager.connect()
     
     bot = await application.bot.get_me()
     logger.info(f"✅ البوت: @{bot.username}")
     
-    # إذا كنا في وضع Webhook، قم بتشغيل خادم الـ API
     if WEBHOOK_URL:
-        await start_api_server(application) # تشغيل خادم API أولاً
+        await start_api_server(application)
     
     logger.info(f"🌐 WebApp: {WEB_APP_URL}")
 
+async def pre_shutdown(application):
+    """قبل الإغلاق"""
+    await shutdown_api_server()
+    if order_manager.pool:
+        await order_manager.pool.close()
+        logger.info("✅ تم إغلاق اتصال PostgreSQL")
 
+# ============= التشغيل =============
 def main():
     """الدالة الرئيسية"""
     
@@ -358,23 +360,40 @@ def main():
     
     logger.info("🚀 تشغيل البوت...")
     
-    # بناء التطبيق
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    # بناء التطبيق مع دوال التهيئة والإغلاق الجديدة
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).post_shutdown(pre_shutdown).build()
     
     # المعالجات
-    # ... (المعالجات لم تتغير) ...
     app.add_error_handler(lambda u, c: logger.error(f"❌ خطأ: {c.error}"))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
-    app.add_handler(PreCheckoutQueryHandler(lambda u, c: u.pre_checkout_query.answer(ok=True)))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
+    # ✅ حذف أي webhook سابق قبل التشغيل
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    async def cleanup_webhook():
+        """تنظيف Webhook قبل البدء"""
+        try:
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("🧹 تم حذف Webhook السابق")
+            await asyncio.sleep(2)
+        except Exception as e:
+            logger.error(f"خطأ في التنظيف: {e}")
+    
+    loop.run_until_complete(cleanup_webhook())
+
     # اختيار وضع التشغيل
     if WEBHOOK_URL:
         logger.info(f"🌐 Webhook Mode")
         logger.info(f"📍 Webhook URL: {WEBHOOK_URL}")
         
-        # يجب أن يكون البوت قادر على الرد على Webhook وطلبات الـ API على نفس المنفذ
+        # تشغيل Webhook
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -387,12 +406,34 @@ def main():
         logger.info("📡 Polling Mode")
         logger.info("❌ ملاحظة: يجب تعيين WEBHOOK_URL لعمل الـ API")
         
-        # تشغيل البوت في وضع Polling (للتجربة المحلية غالباً)
-        app.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=["message", "pre_checkout_query"]
-        )
+        # ✅ معالج إيقاف نظيف (مهم لوضع Polling)
+        def signal_handler(sig, frame):
+            logger.info("🛑 إشارة إيقاف...")
+            # يجب أن يتم الإغلاق بشكل غير متزامن
+            async def shutdown_async():
+                await app.shutdown()
+                await pre_shutdown(app)
+            loop.run_until_complete(shutdown_async())
+            sys.exit(0)
         
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        try:
+            app.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=["message", "pre_checkout_query"],
+                close_loop=False
+            )
+        except KeyboardInterrupt:
+            logger.info("🛑 توقف بواسطة المستخدم")
+            loop.run_until_complete(pre_shutdown(app))
+        except Exception as e:
+            logger.error(f"❌ خطأ خطير: {e}")
+            loop.run_until_complete(pre_shutdown(app))
+        finally:
+            loop.close()
+
 
 if __name__ == "__main__":
     main()
