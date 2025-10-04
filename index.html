@@ -380,9 +380,9 @@
                     <div class="product-name">لاشيء صغير</div>
                     <p class="product-description">مثالي للمبتدئين</p>
                     <div class="price-options">
-                        <button class="price-btn" onclick="showPurchaseModal('small', 5000)">5K ⭐</button>
-                        <button class="price-btn" onclick="showPurchaseModal('small', 10000)">10K ⭐</button>
-                        <button class="price-btn" onclick="showPurchaseModal('small', 15000)">15K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('small', 5000)">5K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('small', 10000)">10K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('small', 15000)">15K ⭐</button>
                     </div>
                 </div>
                 
@@ -391,9 +391,9 @@
                     <div class="product-name">لاشيء متوسط</div>
                     <p class="product-description">الأكثر شعبية</p>
                     <div class="price-options">
-                        <button class="price-btn" onclick="showPurchaseModal('medium', 20000)">20K ⭐</button>
-                        <button class="price-btn" onclick="showPurchaseModal('medium', 30000)">30K ⭐</button>
-                        <button class="price-btn" onclick="showPurchaseModal('medium', 40000)">40K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('medium', 20000)">20K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('medium', 30000)">30K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('medium', 40000)">40K ⭐</button>
                     </div>
                 </div>
                 
@@ -402,23 +402,11 @@
                     <div class="product-name">لاشيء كبير</div>
                     <p class="product-description">للمحترفين فقط</p>
                     <div class="price-options">
-                        <button class="price-btn" onclick="showPurchaseModal('large', 50000)">50K ⭐</button>
-                        <button class="price-btn" onclick="showPurchaseModal('large', 75000)">75K ⭐</button>
-                        <button class="price-btn" onclick="showPurchaseModal('large', 100000)">100K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('large', 50000)">50K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('large', 75000)">75K ⭐</button>
+                        <button class="price-btn" onclick="openInvoice('large', 100000)">100K ⭐</button>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="purchase-modal" id="purchaseModal">
-        <div class="modal-content">
-            <div class="modal-icon">✨</div>
-            <h2 class="modal-title" id="modalTitle">تأكيد الشراء</h2>
-            <p class="modal-text" id="modalText">هل أنت متأكد من شراء هذا المنتج؟</p>
-            <div class="modal-buttons">
-                <button class="btn btn-cancel" onclick="closePurchaseModal()">إلغاء</button>
-                <button class="btn btn-confirm" onclick="confirmPurchase()">تأكيد 🚀</button>
             </div>
         </div>
     </div>
@@ -429,10 +417,14 @@
         tg.setHeaderColor('#667eea');
         tg.setBackgroundColor('#667eea');
         
-        let selectedCategory = '';
-        let selectedAmount = 0;
+        const BOT_USERNAME = 'YOUR_BOT_USERNAME'; // ضع اسم البوت هنا
         
-        // Get user ranks
+        const PRODUCTS = {
+            'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
+            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
+            'large': {name: '💠 لاشيء كبير', emoji: '💠'}
+        };
+        
         function getUserTitle(totalSpent) {
             if (totalSpent >= 500000) return "👑 إمبراطور العدم";
             if (totalSpent >= 300000) return "💎 ملك اللاشيء";
@@ -444,14 +436,12 @@
             return "🌱 زائر جديد";
         }
         
-        // Load user data from Telegram
         function loadUserData() {
             try {
                 const user = tg.initDataUnsafe?.user;
                 if (user) {
                     document.getElementById('userName').textContent = user.first_name || 'مستخدم';
                     
-                    // Try to get user data from bot
                     const startParam = tg.initDataUnsafe?.start_param;
                     if (startParam) {
                         try {
@@ -465,7 +455,6 @@
                 console.log('Error loading user data:', e);
             }
             
-            // Default demo data
             updateUserInterface({
                 totalSpent: 0,
                 orderCount: 0,
@@ -481,7 +470,6 @@
             const rank = getUserTitle(totalSpent);
             document.getElementById('userRank').textContent = rank;
             
-            // Calculate progress to next rank
             const ranks = [
                 {threshold: 10000, name: '🎯 مبتدئ اللاشيء'},
                 {threshold: 20000, name: '✨ تاجر العدم'},
@@ -512,67 +500,24 @@
             }
         }
         
-        function showPurchaseModal(category, amount) {
-            selectedCategory = category;
-            selectedAmount = amount;
-            
-            const names = {
-                'small': '🔹 لاشيء صغير',
-                'medium': '🔷 لاشيء متوسط',
-                'large': '💠 لاشيء كبير'
-            };
-            
-            document.getElementById('modalTitle').textContent = 'تأكيد الشراء';
-            document.getElementById('modalText').textContent = 
-                `هل تريد شراء ${names[category]} مقابل ${amount.toLocaleString()} ⭐؟`;
-            
-            document.getElementById('purchaseModal').style.display = 'flex';
+        function openInvoice(category, amount) {
+            const product = PRODUCTS[category];
             
             // Haptic feedback
             if (tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
+            
+            // استخدام Telegram Invoice Link لفتح نافذة الدفع
+            const invoiceLink = `https://t.me/${BOT_USERNAME}?start=pay_${category}_${amount}`;
+            
+            // فتح نافذة الدفع داخل التطبيق
+            tg.openTelegramLink(invoiceLink);
         }
         
-        function closePurchaseModal() {
-            document.getElementById('purchaseModal').style.display = 'none';
-        }
-        
-        function confirmPurchase() {
-            const data = {
-                category: selectedCategory,
-                amount: selectedAmount,
-                action: 'purchase'
-            };
-            
-            console.log('Sending data to bot:', data);
-            
-            // Send data to bot
-            try {
-                tg.sendData(JSON.stringify(data));
-                
-                // Haptic feedback
-                if (tg.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('success');
-                }
-                
-                // Show success message
-                setTimeout(() => {
-                    tg.showAlert('✅ تم إرسال الطلب للبوت!');
-                }, 500);
-            } catch (e) {
-                console.error('Error sending data:', e);
-                tg.showAlert('❌ حدث خطأ! حاول مرة أخرى.');
-            }
-            
-            closePurchaseModal();
-        }
-        
-        // Initialize on load
         window.addEventListener('load', function() {
             loadUserData();
             
-            // Make main button visible (optional)
             tg.MainButton.setText('إغلاق');
             tg.MainButton.onClick(function() {
                 tg.close();
