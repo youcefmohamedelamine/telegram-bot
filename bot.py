@@ -6,8 +6,7 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    LabeledPrice,
-    WebAppInfo
+    LabeledPrice
 )
 from telegram.ext import (
     Application,
@@ -24,9 +23,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 PROVIDER_TOKEN = ""  # فارغ للـ Telegram Stars
 ORDERS_FILE = "orders.json"
-
-# ضع رابط GitHub Pages هنا بعد النشر
-WEBAPP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
 PRODUCT_TITLE = "Buy Nothing"
 PRODUCT_DESCRIPTION = "Buying literally nothing"
@@ -79,56 +75,37 @@ def get_total_spent(user_id):
         return user_orders.get('amount', 0)
     return 0
 
-def get_user_stats(user_id):
-    """Get user statistics"""
-    total_spent = get_total_spent(user_id)
-    user_data = orders.get(user_id, {})
-    history = user_data.get('history', [user_data] if user_data else [])
-    order_count = len(history) if history and history[0] else 0
-    rank = get_user_title(total_spent)
-    
-    return {
-        'totalSpent': total_spent,
-        'orderCount': order_count,
-        'rank': rank
-    }
-
 # ============= Product Categories ============
 PRODUCTS = {
     "small": {
         "name": "🔹 لاشيء صغير",
         "description": "حجم مثالي للمبتدئين",
-        "emoji": "🔹"
+        "emoji": "🔹",
+        "prices": [5000, 10000, 15000]
     },
     "medium": {
         "name": "🔷 لاشيء متوسط",
         "description": "الخيار الأكثر شعبية",
-        "emoji": "🔷"
+        "emoji": "🔷",
+        "prices": [20000, 30000, 40000]
     },
     "large": {
         "name": "💠 لاشيء كبير",
         "description": "للمحترفين فقط",
-        "emoji": "💠"
+        "emoji": "💠",
+        "prices": [50000, 75000, 100000]
     }
 }
 
-# ============= Main Menu with Web App ============
+# ============= Main Menu ============
 def main_menu(user_id=None):
     title = ""
-    webapp_url = WEBAPP_URL
-    
     if user_id:
         total = get_total_spent(user_id)
         title = get_user_title(total)
-        
-        # Encode user stats in URL for Web App
-        stats = get_user_stats(user_id)
-        import base64
-        stats_encoded = base64.b64encode(json.dumps(stats).encode()).decode()
-        webapp_url = f"{WEBAPP_URL}?data={stats_encoded}"
     
     keyboard = [
-        [InlineKeyboardButton("🌟 افتح المتجر", web_app=WebAppInfo(url=webapp_url))],
+        [InlineKeyboardButton("🛍️ تصفح المنتجات", callback_data="browse_products")],
         [
             InlineKeyboardButton("👤 حسابي", callback_data="my_info"),
             InlineKeyboardButton("🏆 لقبي", callback_data="my_rank")
@@ -155,13 +132,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 مرحباً *{user_name}*! 👋
 {user_title}
 
-✨ *واجهة جديدة ومميزة!*
+🎭 اختر من منتجاتنا الحصرية:
+🔹 *لاشيء صغير* - للمبتدئين
+🔷 *لاشيء متوسط* - الأكثر مبيعاً
+💠 *لاشيء كبير* - للمحترفين
 
-اضغط على "🌟 افتح المتجر" لتجربة:
-• 🎨 تصميم عصري وجميل
-• 📊 إحصائيات تفاعلية
-• 🏆 نظام الألقاب المرئي
-• 🛍️ تصفح سهل وسريع
+💫 كل عملية شراء تقربك من لقب أعلى!
 
 ⬇️ اختر من القائمة:
 """
@@ -171,45 +147,140 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ============= Handle Web App Data ============
-async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    user_name = update.message.from_user.first_name
-    
-    try:
-        data = json.loads(update.message.web_app_data.data)
+# ============= Menu Handler ============
+async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = str(query.from_user.id)
+    await query.answer()
+
+    if query.data == "browse_products":
+        browse_message = """
+╭━━━━━━━━━━━━━━━━━━━╮
+┃  🛍️ تصفح المنتجات  ┃
+╰━━━━━━━━━━━━━━━━━━━╯
+
+اختر الفئة المناسبة لك:
+
+🔹 *لاشيء صغير*
+   └ مثالي للبداية
+   └ 5K - 15K ⭐
+
+🔷 *لاشيء متوسط*  
+   └ الأكثر شعبية
+   └ 20K - 40K ⭐
+
+💠 *لاشيء كبير*
+   └ للمحترفين فقط
+   └ 50K - 100K ⭐
+
+━━━━━━━━━━━━━━━━
+⬇️ اختر الفئة:
+"""
+        keyboard = [
+            [InlineKeyboardButton("🔹 لاشيء صغير", callback_data="cat_small")],
+            [InlineKeyboardButton("🔷 لاشيء متوسط", callback_data="cat_medium")],
+            [InlineKeyboardButton("💠 لاشيء كبير", callback_data="cat_large")],
+            [InlineKeyboardButton("« رجوع", callback_data="back")]
+        ]
+        await query.edit_message_text(
+            browse_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif query.data.startswith("cat_"):
+        category = query.data.replace("cat_", "")
+        product = PRODUCTS[category]
         
-        category = data.get('category')
-        amount = data.get('amount')
+        category_message = f"""
+╭━━━━━━━━━━━━━━━━━━━╮
+┃  {product['emoji']} {product['name']}  ┃
+╰━━━━━━━━━━━━━━━━━━━╯
+
+📦 *الوصف:* {product['description']}
+
+✨ المميزات:
+  • جودة عالية من العدم
+  • تسليم فوري 100%
+  • ضمان اللاوجود
+  • دعم فني 24/7
+
+━━━━━━━━━━━━━━━━
+💰 اختر السعر المناسب:
+"""
+        keyboard = []
+        for price in product['prices']:
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{product['emoji']} {price:,} ⭐",
+                    callback_data=f"buy_{category}_{price}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton("« رجوع للفئات", callback_data="browse_products")])
         
-        if data.get('action') == 'purchase' and category and amount:
-            product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨", "description": "منتج حصري"})
+        await query.edit_message_text(
+            category_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif query.data.startswith("buy_"):
+        parts = query.data.split("_")
+        category = parts[1]
+        amount = int(parts[2])
+        product = PRODUCTS[category]
+        
+        # إرسال رسالة تأكيد
+        confirm_message = f"""
+╭━━━━━━━━━━━━━━━━━━━╮
+┃  ✨ تأكيد الشراء  ┃
+╰━━━━━━━━━━━━━━━━━━━╯
+
+📦 المنتج: *{product['name']}*
+💰 السعر: *{amount:,} ⭐*
+
+🎯 هل تريد المتابعة؟
+"""
+        keyboard = [
+            [InlineKeyboardButton("✅ تأكيد الشراء", callback_data=f"confirm_{category}_{amount}")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data=f"cat_{category}")]
+        ]
+        
+        await query.edit_message_text(
+            confirm_message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif query.data.startswith("confirm_"):
+        parts = query.data.split("_")
+        category = parts[1]
+        amount = int(parts[2])
+        product = PRODUCTS[category]
+        
+        # إرسال فاتورة الدفع
+        try:
             prices = [LabeledPrice(f"{product['name']}", amount)]
             
-            # Send invoice
-            await context.bot.send_invoice(
-                chat_id=update.message.chat_id,
+            await query.message.reply_invoice(
                 title=f"{product['emoji']} {product['name']}",
-                description=f"✨ {product['description']} - {amount:,} نجمة",
+                description=f"✨ {product['description']}\n💰 {amount:,} نجمة",
                 payload=f"{PAYLOAD}_{category}_{amount}",
                 provider_token=PROVIDER_TOKEN,
                 currency="XTR",
                 prices=prices
             )
             
-            logger.info(f"Invoice sent to {user_name} ({user_id}): {product['name']} - {amount} stars")
-    
-    except Exception as e:
-        logger.error(f"Error handling web app data: {e}")
-        await update.message.reply_text("❌ حدث خطأ! حاول مرة أخرى.")
+            await query.answer("✅ تم إرسال الفاتورة!", show_alert=False)
+            
+            # حذف رسالة التأكيد
+            await query.message.delete()
+            
+        except Exception as e:
+            logger.error(f"Error sending invoice: {e}")
+            await query.answer("❌ حدث خطأ! حاول مرة أخرى.", show_alert=True)
 
-# ============= Menu Handler (Buttons) ============
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = str(query.from_user.id)
-    await query.answer()
-
-    if query.data == "my_info":
+    elif query.data == "my_info":
         total_spent = get_total_spent(user_id)
         user_title = get_user_title(total_spent)
         user_data = orders.get(user_id, {})
@@ -225,7 +296,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ❌ لم تقم بأي عملية شراء بعد
 
-🎁 افتح المتجر وابدأ رحلتك!
+🎁 ابدأ رحلتك في عالم اللاشيء!
 """
         else:
             history = user_data.get('history', [user_data])
@@ -475,9 +546,11 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=menu_markup
     )
 
-    total_orders = sum(len(user_data.get('history', [])) if isinstance(user_data, dict) and 'history' in user_data else 1 for user_data in orders.values())
-    total_revenue = sum(get_total_spent(uid) for uid in orders.keys())
-    admin_notification = f"""
+    # إشعار الأدمن
+    try:
+        total_orders = sum(len(user_data.get('history', [])) if isinstance(user_data, dict) and 'history' in user_data else 1 for user_data in orders.values())
+        total_revenue = sum(get_total_spent(uid) for uid in orders.keys())
+        admin_notification = f"""
 ╔══════════════════════╗
 ║   📢 طلب جديد!   ║
 ╚══════════════════════╝
@@ -493,25 +566,25 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 🎯 إجمالي الطلبات: {total_orders}
 💎 إجمالي الإيرادات: {total_revenue:,} ⭐
 """
-    
-    await context.bot.send_message(
-        ADMIN_ID,
-        admin_notification,
-        parse_mode="Markdown"
-    )
+        
+        await context.bot.send_message(
+            ADMIN_ID,
+            admin_notification,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Error sending admin notification: {e}")
 
 # ============= Run Bot ============
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     app.add_handler(CallbackQueryHandler(menu_handler))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
 
-    logger.info("🚀 Bot is running with Web App interface (No Flask needed)...")
-    logger.info(f"📱 Web App URL: {WEBAPP_URL}")
+    logger.info("🚀 Bot is running with inline buttons payment system...")
     app.run_polling()
 
 if __name__ == "__main__":
