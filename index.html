@@ -545,12 +545,24 @@
                 action: 'purchase'
             };
             
-            // Send data to bot
-            tg.sendData(JSON.stringify(data));
+            console.log('Sending data to bot:', data);
             
-            // Haptic feedback
-            if (tg.HapticFeedback) {
-                tg.HapticFeedback.notificationOccurred('success');
+            // Send data to bot
+            try {
+                tg.sendData(JSON.stringify(data));
+                
+                // Haptic feedback
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+                
+                // Show success message
+                setTimeout(() => {
+                    tg.showAlert('✅ تم إرسال الطلب للبوت!');
+                }, 500);
+            } catch (e) {
+                console.error('Error sending data:', e);
+                tg.showAlert('❌ حدث خطأ! حاول مرة أخرى.');
             }
             
             closePurchaseModal();
