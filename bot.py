@@ -69,13 +69,17 @@ class OrderManager:
         self.pool = None
     
     async def connect(self):
+        # ⚠️ التعديل هنا: استخدام رابط DATABASE_URL الموحد
+        DATABASE_URL = os.getenv("DATABASE_URL")
+        
+        if not DATABASE_URL:
+            logger.error("❌ متغير DATABASE_URL غير موجود. تأكد من تعيينه في Railway!")
+            sys.exit(1)
+            
         try:
+            # دالة create_pool تقبل الرابط الموحد مباشرة
             self.pool = await asyncpg.create_pool(
-                user=os.getenv("PGUSER"),
-                password=os.getenv("PGPASSWORD"),
-                database=os.getenv("PGDATABASE"),
-                host=os.getenv("PGHOST"),
-                port=os.getenv("PGPORT", 5432)
+                DATABASE_URL
             )
             logger.info("✅ تم الاتصال بقاعدة بيانات PostgreSQL بنجاح!")
             await self.create_table()
