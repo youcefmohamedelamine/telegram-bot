@@ -16,7 +16,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 PROVIDER_TOKEN = ""
 ORDERS_FILE = "orders.json"
-WEB_APP_URL = "YOUR_WEB_APP_URL"
+WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
