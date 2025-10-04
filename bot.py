@@ -253,15 +253,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             return
                         
                         product = PRODUCTS[category]
-                        prices = [LabeledPrice(product["name"], amount)]
+                        prices = [LabeledPrice(label="السعر", amount=amount)]
+                        
+                        # وصف احترافي
+                        description = f"""✨ {product['desc']}
+
+🎁 ستحصل على:
+• ملكية حصرية للاشيء
+• ترقية اللقب التلقائية
+• دعم فني مميز
+
+💫 شكراً لاختيارك متجر اللاشيء!"""
                         
                         await update.message.reply_invoice(
-                            title=f"{product['emoji']} {product['name']}",
-                            description=f"{product['desc']}\n💰 السعر: {amount:,} نجمة ⭐",
+                            title=f"{product['name']}",
+                            description=description,
                             payload=f"order_{user_id}_{category}_{amount}_{datetime.now().timestamp()}",
                             provider_token=PROVIDER_TOKEN,
                             currency="XTR",
                             prices=prices,
+                            max_tip_amount=50000,
+                            suggested_tip_amounts=[1000, 5000, 10000, 25000],
+                            photo_url="https://i.imgur.com/YourImage.jpg",  # اختياري: ضع صورة المنتج
+                            photo_width=512,
+                            photo_height=512,
                             need_name=False,
                             need_phone_number=False,
                             need_email=False,
