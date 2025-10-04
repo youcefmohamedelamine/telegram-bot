@@ -10,14 +10,14 @@ from telegram.ext import (
     ContextTypes,
     PreCheckoutQueryHandler,
     MessageHandler,
-    filters
+    filters,
+    CallbackQueryHandler
 )
-from aiohttp import web
 
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()  # مثلاً: https://yourdomain.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
 PORT = int(os.getenv("PORT", 8080))
 ORDERS_FILE = "orders.json"
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
@@ -144,19 +144,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============= معالج البيانات من Web App =============
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        logger.info(f"استقبال web_app_data من: {update.message.from_user.id}")
+        logger.info(f"محتوى البيانات: {update.message.web_app_data.data}")
+        
         data = json.loads(update.message.web_app_data.data)
         action = data.get('action')
         user = update.message.from_user
-        
-        logger.info(f"استقبال بيانات من Web App: {data}")
         
         if action == 'buy':
             category = data.get('category')
             amount = int(data.get('amount', 0))
             
+            logger.info(f"طلب شراء: {category} - {amount}")
+            
             if not validate_price(category, amount):
                 await update.message.reply_text("❌ بيانات غير صحيحة")
-                logger.warning(f"محاولة شراء بمعلومات خاطئة: {user.id} - {category} - {amount}")
                 return
             
             product = PRODUCTS[category]
@@ -172,20 +174,53 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
                 suggested_tip_amounts=[1000, 5000, 10000, 25000]
             )
             
-            logger.info(f"تم إرسال فاتورة: {user.id} - {category} - {amount}")
+            logger.info(f"✅ تم إرسال فاتورة: {user.id} - {category} - {amount}")
             
-    except json.JSONDecodeError as e:
-        logger.error(f"خطأ في تحليل JSON: {e}")
-        await update.message.reply_text("❌ خطأ في البيانات المرسلة")
     except Exception as e:
-        logger.error(f"خطأ في معالج Web App: {e}", exc_info=True)
-        await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
+        logger.error(f"❌ خطأ في معالج Web App: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
+        except:
+            pass
+
+# ============= معالج الأزرار Inline =============
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        data = query.data.split("_")
+        if data[0] == "buy":
+            category = data[1]
+            amount = int(data[2])
+            user = query.from_user
+            
+            if not validate_price(category, amount):
+                await query.message.reply_text("❌ بيانات غير صحيحة")
+                return
+            
+            product = PRODUCTS[category]
+            
+            await query.message.reply_invoice(
+                title=f"{product['emoji']} {product['name']}",
+                description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
+                payload=f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}",
+                provider_token="",
+                currency="XTR",
+                prices=[LabeledPrice("السعر", amount)],
+                max_tip_amount=50000,
+                suggested_tip_amounts=[1000, 5000, 10000, 25000]
+            )
+            
+            logger.info(f"✅ فاتورة من callback: {user.id} - {category} - {amount}")
+    except Exception as e:
+        logger.error(f"خطأ في معالج callback: {e}")
 
 # ============= معالج التحقق قبل الدفع =============
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     await query.answer(ok=True)
-    logger.info(f"تم التحقق من الدفع: {query.from_user.id}")
+    logger.info(f"✅ تحقق من الدفع: {query.from_user.id}")
 
 # ============= معالج الدفع الناجح =============
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,7 +255,7 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"شكراً لك ❤️"
     )
     
-    logger.info(f"دفع ناجح: {user.id} - {category} - {payment.total_amount}")
+    logger.info(f"✅ دفع ناجح: {user.id} - {category} - {payment.total_amount}")
     
     if ADMIN_ID:
         try:
@@ -234,72 +269,61 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"🏷️ اللقب: {new_rank}"
             )
         except Exception as e:
-            logger.error(f"خطأ في إرسال إشعار للأدمن: {e}")
+            logger.error(f"خطأ إشعار الأدمن: {e}")
 
 # ============= معالج الأخطاء =============
 async def error_handler(update, context):
-    logger.error(f"خطأ: {context.error}", exc_info=context.error)
-    try:
-        if update and update.message:
-            await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
-    except:
-        pass
+    logger.error(f"❌ خطأ: {context.error}", exc_info=context.error)
 
 # ============= التهيئة =============
 async def post_init(application):
     bot = await application.bot.get_me()
     logger.info(f"✅ البوت متصل: @{bot.username}")
     logger.info(f"🆔 البوت ID: {bot.id}")
-    logger.info(f"📊 عدد الطلبات المحفوظة: {len(order_manager.orders)}")
+    logger.info(f"📊 طلبات محفوظة: {len(order_manager.orders)}")
 
 # ============= التشغيل =============
 def main():
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
-        logger.error("❌ BOT_TOKEN غير صحيح أو غير موجود")
+        logger.error("❌ BOT_TOKEN غير صحيح")
         sys.exit(1)
     
     logger.info("🚀 جاري تشغيل البوت...")
     
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
-    # إضافة المعالجات
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
+    app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    # اختيار الطريقة حسب وجود WEBHOOK_URL
     if WEBHOOK_URL:
-        logger.info(f"🌐 استخدام Webhook: {WEBHOOK_URL}")
-        logger.info(f"🔌 المنفذ: {PORT}")
+        logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
+        logger.info(f"🔌 Port: {PORT}")
         
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
             url_path=BOT_TOKEN,
             webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query", "pre_checkout_query"]
         )
     else:
-        logger.info("📡 استخدام Polling")
-        logger.info("⚠️ تحذير: قد يحدث تعارض إذا كان هناك webhook مفعل")
+        logger.info("📡 Polling")
         
-        # حذف الـ webhook إن وجد
         import asyncio
         asyncio.get_event_loop().run_until_complete(
             app.bot.delete_webhook(drop_pending_updates=True)
         )
-        logger.info("✅ تم حذف webhook")
         
-        logger.info("✅ البوت يعمل الآن...")
-        logger.info("اضغط Ctrl+C للإيقاف")
+        logger.info("✅ البوت يعمل...")
         
         app.run_polling(
             drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES,
-            timeout=30,
-            poll_interval=0.0
+            allowed_updates=["message", "callback_query", "pre_checkout_query"]
         )
 
 if __name__ == "__main__":
