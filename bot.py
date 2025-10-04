@@ -5,8 +5,11 @@ import sys
 import signal
 import asyncio
 from datetime import datetime
+
+# استيراد مكتبات قاعدة البيانات والـ API
 import asyncpg
 from aiohttp import web
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     Application,
@@ -438,4 +441,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main() طيب شوف
