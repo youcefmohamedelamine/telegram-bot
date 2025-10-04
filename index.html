@@ -225,10 +225,19 @@
             cursor: not-allowed;
         }
         
-        .loading {
+        .success-message {
+            background: rgba(0, 255, 0, 0.2);
+            border: 2px solid rgba(0, 255, 0, 0.5);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 20px 0;
             text-align: center;
-            padding: 20px;
-            font-size: 1.2em;
+            display: none;
+        }
+        
+        .success-message.show {
+            display: block;
+            animation: fadeInUp 0.5s;
         }
         
         .error-message {
@@ -280,6 +289,10 @@
         <div class="header">
             <h1>🌟 متجر اللاشيء 🌟</h1>
             <p class="subtitle">امتلك العدم بأفضل الأسعار</p>
+        </div>
+        
+        <div class="success-message" id="successMessage">
+            ✅ تم إرسال الطلب! انتظر الفاتورة...
         </div>
         
         <div class="error-message" id="errorMessage">
@@ -356,15 +369,13 @@
     </div>
     
     <script>
-        let tg = null;
-        let isInitialized = false;
+        let tg = window.Telegram.WebApp;
         let purchaseInProgress = false;
-        let botUsername = '';
         
         const PRODUCTS = {
-            'small': {name: '🔹 لاشيء صغير', emoji: '🔹', desc: 'مثالي للمبتدئين'},
-            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷', desc: 'الأكثر شعبية'},
-            'large': {name: '💠 لاشيء كبير', emoji: '💠', desc: 'للمحترفين'}
+            'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
+            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
+            'large': {name: '💠 لاشيء كبير', emoji: '💠'}
         };
         
         const VALID_PRICES = {
@@ -384,309 +395,142 @@
             {threshold: 0, name: '🌱 زائر جديد'}
         ];
         
+        function showMessage(elementId, message, duration = 3000) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.textContent = message;
+                el.classList.add('show');
+                setTimeout(() => el.classList.remove('show'), duration);
+            }
+        }
+        
         function showError(message) {
-            try {
-                const errorEl = document.getElementById('errorMessage');
-                if (errorEl) {
-                    errorEl.textContent = message || '❌ حدث خطأ! حاول مرة أخرى';
-                    errorEl.classList.add('show');
-                    setTimeout(() => errorEl.classList.remove('show'), 3000);
-                }
-            } catch (e) {
-                console.error('Error showing error:', e);
-            }
+            showMessage('errorMessage', message);
         }
         
-        function sanitizeText(text, maxLength = 100) {
-            try {
-                if (typeof text !== 'string') return 'مستخدم';
-                text = text.trim();
-                if (text.length > maxLength) text = text.substring(0, maxLength);
-                const div = document.createElement('div');
-                div.textContent = text;
-                return div.textContent || 'مستخدم';
-            } catch (e) {
-                return 'مستخدم';
-            }
-        }
-        
-        function safeSetText(elementId, text) {
-            try {
-                const element = document.getElementById(elementId);
-                if (element) element.textContent = sanitizeText(String(text));
-            } catch (e) {
-                console.error(`Error setting text for ${elementId}:`, e);
-            }
+        function showSuccess(message) {
+            showMessage('successMessage', message);
         }
         
         function formatNumber(num) {
-            try {
-                const number = parseInt(num);
-                if (isNaN(number)) return '0';
-                return number.toLocaleString('ar-EG');
-            } catch (e) {
-                return '0';
-            }
+            const number = parseInt(num) || 0;
+            return number.toLocaleString('ar-EG');
         }
         
         function getUserTitle(totalSpent) {
-            try {
-                const spent = parseInt(totalSpent) || 0;
-                for (let rank of RANKS) {
-                    if (spent >= rank.threshold) return rank.name;
-                }
-                return RANKS[RANKS.length - 1].name;
-            } catch (e) {
-                return '🌱 زائر جديد';
+            const spent = parseInt(totalSpent) || 0;
+            for (let rank of RANKS) {
+                if (spent >= rank.threshold) return rank.name;
             }
+            return RANKS[RANKS.length - 1].name;
         }
         
-        function validatePrice(category, amount) {
-            try {
-                if (!category || !VALID_PRICES[category]) return false;
-                const price = parseInt(amount);
-                if (isNaN(price)) return false;
-                return VALID_PRICES[category].includes(price);
-            } catch (e) {
-                return false;
+        function updateProgressBar(totalSpent) {
+            const spent = parseInt(totalSpent) || 0;
+            let nextRank = null;
+            
+            for (let rank of RANKS) {
+                if (spent < rank.threshold) nextRank = rank;
             }
-        }
-        
-        function initTelegram() {
-            try {
-                if (!window.Telegram || !window.Telegram.WebApp) {
-                    console.error('Telegram WebApp not available');
-                    return false;
-                }
-                
-                tg = window.Telegram.WebApp;
-                tg.ready();
-                tg.expand();
-                
-                try {
-                    if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
-                    if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
-                } catch (e) {
-                    console.warn('Could not set colors:', e);
-                }
-                
-                // استخراج اسم البوت من initData
-                try {
-                    const initData = tg.initDataUnsafe;
-                    if (initData && initData.user) {
-                        // البوت username سيأتي من backend
-                        console.log('Init data:', initData);
-                    }
-                } catch (e) {
-                    console.error('Error parsing init data:', e);
-                }
-                
-                isInitialized = true;
-                return true;
-            } catch (e) {
-                console.error('Error initializing Telegram:', e);
-                return false;
+            
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const nextRankEl = document.getElementById('nextRank');
+            
+            if (nextRank) {
+                const progress = Math.min(100, (spent / nextRank.threshold) * 100);
+                progressBar.style.width = progress + '%';
+                progressText.textContent = Math.round(progress) + '%';
+                nextRankEl.textContent = `🎯 اللقب القادم: ${nextRank.name}`;
+            } else {
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                nextRankEl.textContent = '🎉 وصلت لأعلى لقب!';
             }
         }
         
         function loadUserData() {
             try {
-                if (!tg) {
-                    updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
-                    return;
-                }
-                
                 const user = tg.initDataUnsafe?.user;
-                if (user && user.first_name) {
-                    safeSetText('userName', user.first_name);
+                if (user?.first_name) {
+                    document.getElementById('userName').textContent = user.first_name;
                 }
                 
-                // إرسال طلب للبوت للحصول على بيانات المستخدم
-                fetch(`https://api.telegram.org/bot${getBotToken()}/getMe`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.ok && data.result) {
-                            botUsername = data.result.username;
-                            console.log('Bot username:', botUsername);
-                        }
-                    })
-                    .catch(err => console.error('Error fetching bot info:', err));
-                
-                try {
-                    const startParam = tg.initDataUnsafe?.start_param;
-                    if (startParam && startParam.length > 0) {
-                        const data = JSON.parse(atob(startParam));
-                        if (data && typeof data === 'object') {
-                            updateUserInterface(data);
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.log('Error parsing start param:', e);
+                const startParam = tg.initDataUnsafe?.start_param;
+                if (startParam) {
+                    const data = JSON.parse(atob(startParam));
+                    const totalSpent = parseInt(data.totalSpent) || 0;
+                    const orderCount = parseInt(data.orderCount) || 0;
+                    
+                    document.getElementById('totalSpent').textContent = formatNumber(totalSpent);
+                    document.getElementById('orderCount').textContent = formatNumber(orderCount);
+                    document.getElementById('userRank').textContent = getUserTitle(totalSpent);
+                    updateProgressBar(totalSpent);
                 }
-                
-                updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
             } catch (e) {
                 console.error('Error loading user data:', e);
-                updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
             }
         }
         
-        function getBotToken() {
-            // هذا placeholder - البوت الحقيقي سيمرر المعلومات عبر initData
-            return 'YOUR_BOT_TOKEN';
-        }
-        
-        function updateUserInterface(data) {
-            try {
-                if (!data || typeof data !== 'object') return;
-                
-                const totalSpent = parseInt(data.totalSpent) || 0;
-                const orderCount = parseInt(data.orderCount) || 0;
-                
-                safeSetText('totalSpent', formatNumber(totalSpent));
-                safeSetText('orderCount', formatNumber(orderCount));
-                
-                const rank = getUserTitle(totalSpent);
-                safeSetText('userRank', rank);
-                
-                updateProgressBar(totalSpent);
-            } catch (e) {
-                console.error('Error updating UI:', e);
+        function buyProduct(category, amount) {
+            if (purchaseInProgress) {
+                showError('⏳ جاري معالجة طلبك...');
+                return;
             }
-        }
-        
-        function updateProgressBar(totalSpent) {
-            try {
-                const spent = parseInt(totalSpent) || 0;
-                let nextRank = null;
-                
-                for (let rank of RANKS) {
-                    if (spent < rank.threshold) nextRank = rank;
-                }
-                
-                const progressBar = document.getElementById('progressBar');
-                const progressText = document.getElementById('progressText');
-                const nextRankEl = document.getElementById('nextRank');
-                
-                if (!progressBar || !progressText || !nextRankEl) return;
-                
-                if (nextRank) {
-                    const progress = Math.min(100, (spent / nextRank.threshold) * 100);
-                    const progressRounded = Math.round(progress);
-                    progressBar.style.width = progress + '%';
-                    progressText.textContent = progressRounded + '%';
-                    nextRankEl.textContent = `🎯 اللقب القادم: ${nextRank.name}`;
-                } else {
-                    progressBar.style.width = '100%';
-                    progressText.textContent = '100%';
-                    nextRankEl.textContent = '🎉 وصلت لأعلى لقب!';
-                }
-            } catch (e) {
-                console.error('Error updating progress:', e);
+            
+            if (!VALID_PRICES[category]?.includes(amount)) {
+                showError('❌ بيانات غير صحيحة');
+                return;
             }
-        }
-        
-        async function buyProduct(category, amount) {
+            
+            purchaseInProgress = true;
+            
             try {
-                if (purchaseInProgress) {
-                    showError('⏳ جاري معالجة طلبك...');
-                    return;
+                if (tg.HapticFeedback?.impactOccurred) {
+                    tg.HapticFeedback.impactOccurred('medium');
                 }
+            } catch (e) {}
+            
+            const product = PRODUCTS[category];
+            const formattedPrice = (amount / 1000) + 'K';
+            
+            try {
+                const data = JSON.stringify({
+                    action: 'buy',
+                    category: category,
+                    amount: amount
+                });
                 
-                if (!category || !amount) {
-                    showError('❌ بيانات غير صحيحة');
-                    return;
-                }
-                
-                if (!PRODUCTS[category]) {
-                    showError('❌ منتج غير صحيح');
-                    return;
-                }
-                
-                if (!validatePrice(category, amount)) {
-                    showError('❌ سعر غير صحيح');
-                    return;
-                }
-                
-                if (!tg || !isInitialized) {
-                    showError('❌ خطأ في الاتصال بتيليجرام');
-                    return;
-                }
-                
-                purchaseInProgress = true;
-                
-                try {
-                    if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
-                        tg.HapticFeedback.impactOccurred('medium');
-                    }
-                } catch (e) {}
-                
-                const product = PRODUCTS[category];
-                
-                // طلب رابط الفاتورة من البوت
-                try {
-                    tg.sendData(JSON.stringify({
-                        action: 'buy',
-                        category: category,
-                        amount: amount
-                    }));
-                } catch (e) {
-                    console.error('Error sending data to bot:', e);
-                    showError('❌ خطأ في الاتصال بالبوت');
-                }
+                tg.sendData(data);
+                showSuccess(`✅ تم إرسال طلب ${product.name} (${formattedPrice} ⭐)`);
                 
                 setTimeout(() => {
                     purchaseInProgress = false;
                 }, 2000);
+                
             } catch (e) {
-                console.error('Error in buyProduct:', e);
-                showError('❌ حدث خطأ في عملية الشراء');
+                console.error('Error sending data:', e);
+                showError('❌ فشل إرسال الطلب');
                 purchaseInProgress = false;
             }
         }
         
-        function setupButtons() {
-            try {
-                if (!tg) return;
-                
-                try {
-                    if (tg.MainButton) {
-                        tg.MainButton.setText('🔄 تحديث البيانات');
-                        tg.MainButton.show();
-                        tg.MainButton.onClick(() => location.reload());
-                    }
-                } catch (e) {}
-            } catch (e) {
-                console.error('Error setting up buttons:', e);
-            }
-        }
+        // التهيئة
+        tg.ready();
+        tg.expand();
         
-        function initApp() {
-            try {
-                if (!initTelegram()) {
-                    showError('❌ خطأ في الاتصال بتيليجرام');
-                    return;
-                }
-                
-                loadUserData();
-                setupButtons();
-            } catch (e) {
-                console.error('Fatal error:', e);
-                showError('❌ خطأ فادح في تشغيل التطبيق');
-            }
-        }
+        try {
+            if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
+            if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
+        } catch (e) {}
         
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initApp);
-        } else {
-            initApp();
-        }
+        loadUserData();
         
-        window.addEventListener('error', function(event) {
-            console.error('Global error:', event.error);
-            showError('❌ حدث خطأ غير متوقع');
-        });
+        if (tg.MainButton) {
+            tg.MainButton.setText('🔄 تحديث البيانات');
+            tg.MainButton.show();
+            tg.MainButton.onClick(() => location.reload());
+        }
     </script>
 </body>
 </html>
