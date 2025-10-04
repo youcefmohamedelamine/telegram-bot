@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="متجر اللاشيء - امتلك العدم بأفضل الأسعار">
     <title>متجر اللاشيء</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -14,18 +13,16 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             color: white;
-            overflow-x: hidden;
-            padding-bottom: 20px;
+            padding: 20px;
         }
         
         .container {
             max-width: 500px;
             margin: 0 auto;
-            padding: 20px;
         }
         
         .header {
@@ -38,11 +35,6 @@
             font-size: 2.2em;
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        .header .subtitle {
-            font-size: 1em;
-            opacity: 0.9;
         }
         
         .profile-card {
@@ -71,14 +63,11 @@
             align-items: center;
             justify-content: center;
             font-size: 1.8em;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         
         .profile-info h2 {
             font-size: 1.3em;
             margin-bottom: 5px;
-            word-wrap: break-word;
-            max-width: 300px;
         }
         
         .rank-badge {
@@ -107,43 +96,11 @@
             font-size: 1.5em;
             font-weight: bold;
             display: block;
-            margin-bottom: 3px;
         }
         
         .stat-label {
             font-size: 0.85em;
             opacity: 0.8;
-        }
-        
-        .rank-progress {
-            margin: 20px 0;
-            animation: fadeInUp 1s;
-        }
-        
-        .progress-bar {
-            background: rgba(255, 255, 255, 0.2);
-            height: 25px;
-            border-radius: 15px;
-            overflow: hidden;
-            margin-bottom: 8px;
-        }
-        
-        .progress-fill {
-            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
-            height: 100%;
-            transition: width 1s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 0.9em;
-            min-width: 40px;
-        }
-        
-        .next-rank {
-            text-align: center;
-            font-size: 0.95em;
-            opacity: 0.9;
         }
         
         .products-section {
@@ -169,11 +126,6 @@
             border-radius: 18px;
             padding: 20px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        
-        .product-card:active {
-            transform: scale(0.98);
         }
         
         .product-icon {
@@ -193,7 +145,6 @@
             text-align: center;
             opacity: 0.9;
             margin-bottom: 15px;
-            font-size: 0.95em;
         }
         
         .price-options {
@@ -220,39 +171,33 @@
             transform: scale(0.95);
         }
         
-        .price-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .message {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 25px;
+            border-radius: 12px;
+            font-weight: bold;
+            display: none;
+            z-index: 1000;
+            min-width: 200px;
+            text-align: center;
         }
         
-        .success-message {
+        .message.show {
+            display: block;
+            animation: slideDown 0.3s;
+        }
+        
+        .message.success {
             background: rgba(0, 255, 0, 0.2);
             border: 2px solid rgba(0, 255, 0, 0.5);
-            border-radius: 12px;
-            padding: 15px;
-            margin: 20px 0;
-            text-align: center;
-            display: none;
         }
         
-        .success-message.show {
-            display: block;
-            animation: fadeInUp 0.5s;
-        }
-        
-        .error-message {
+        .message.error {
             background: rgba(255, 0, 0, 0.2);
             border: 2px solid rgba(255, 0, 0, 0.5);
-            border-radius: 12px;
-            padding: 15px;
-            margin: 20px 0;
-            text-align: center;
-            display: none;
-        }
-        
-        .error-message.show {
-            display: block;
-            animation: shake 0.5s;
         }
         
         @keyframes fadeInDown {
@@ -277,26 +222,25 @@
             }
         }
         
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-10px); }
-            75% { transform: translateX(10px); }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -20px);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
         }
     </style>
 </head>
 <body>
+    <div class="message" id="message"></div>
+    
     <div class="container">
         <div class="header">
             <h1>🌟 متجر اللاشيء 🌟</h1>
-            <p class="subtitle">امتلك العدم بأفضل الأسعار</p>
-        </div>
-        
-        <div class="success-message" id="successMessage">
-            ✅ تم إرسال الطلب! انتظر الفاتورة...
-        </div>
-        
-        <div class="error-message" id="errorMessage">
-            ❌ حدث خطأ! حاول مرة أخرى
+            <p>امتلك العدم بأفضل الأسعار</p>
         </div>
         
         <div class="profile-card">
@@ -318,15 +262,6 @@
                     <span class="stat-label">📦 الطلبات</span>
                 </div>
             </div>
-        </div>
-        
-        <div class="rank-progress">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressBar" style="width: 0%">
-                    <span id="progressText">0%</span>
-                </div>
-            </div>
-            <p class="next-rank" id="nextRank">🎯 اللقب القادم: مبتدئ اللاشيء</p>
         </div>
         
         <div class="products-section">
@@ -369,84 +304,18 @@
     </div>
     
     <script>
-        let tg = window.Telegram.WebApp;
-        let purchaseInProgress = false;
+        const tg = window.Telegram.WebApp;
+        let processing = false;
         
-        const PRODUCTS = {
-            'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
-            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
-            'large': {name: '💠 لاشيء كبير', emoji: '💠'}
-        };
-        
-        const VALID_PRICES = {
-            'small': [5000, 10000, 15000],
-            'medium': [20000, 30000, 40000],
-            'large': [50000, 75000, 100000]
-        };
-        
-        const RANKS = [
-            {threshold: 500000, name: '👑 إمبراطور العدم'},
-            {threshold: 300000, name: '💎 ملك اللاشيء'},
-            {threshold: 200000, name: '🏆 أمير الفراغ'},
-            {threshold: 100000, name: '⭐ نبيل العدم'},
-            {threshold: 50000, name: '🌟 فارس اللاشيء'},
-            {threshold: 20000, name: '✨ تاجر العدم'},
-            {threshold: 10000, name: '🎯 مبتدئ اللاشيء'},
-            {threshold: 0, name: '🌱 زائر جديد'}
-        ];
-        
-        function showMessage(elementId, message, duration = 3000) {
-            const el = document.getElementById(elementId);
-            if (el) {
-                el.textContent = message;
-                el.classList.add('show');
-                setTimeout(() => el.classList.remove('show'), duration);
-            }
-        }
-        
-        function showError(message) {
-            showMessage('errorMessage', message);
-        }
-        
-        function showSuccess(message) {
-            showMessage('successMessage', message);
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = `message ${type} show`;
+            setTimeout(() => msg.classList.remove('show'), 3000);
         }
         
         function formatNumber(num) {
-            const number = parseInt(num) || 0;
-            return number.toLocaleString('ar-EG');
-        }
-        
-        function getUserTitle(totalSpent) {
-            const spent = parseInt(totalSpent) || 0;
-            for (let rank of RANKS) {
-                if (spent >= rank.threshold) return rank.name;
-            }
-            return RANKS[RANKS.length - 1].name;
-        }
-        
-        function updateProgressBar(totalSpent) {
-            const spent = parseInt(totalSpent) || 0;
-            let nextRank = null;
-            
-            for (let rank of RANKS) {
-                if (spent < rank.threshold) nextRank = rank;
-            }
-            
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const nextRankEl = document.getElementById('nextRank');
-            
-            if (nextRank) {
-                const progress = Math.min(100, (spent / nextRank.threshold) * 100);
-                progressBar.style.width = progress + '%';
-                progressText.textContent = Math.round(progress) + '%';
-                nextRankEl.textContent = `🎯 اللقب القادم: ${nextRank.name}`;
-            } else {
-                progressBar.style.width = '100%';
-                progressText.textContent = '100%';
-                nextRankEl.textContent = '🎉 وصلت لأعلى لقب!';
-            }
+            return parseInt(num || 0).toLocaleString('ar-EG');
         }
         
         function loadUserData() {
@@ -459,78 +328,62 @@
                 const startParam = tg.initDataUnsafe?.start_param;
                 if (startParam) {
                     const data = JSON.parse(atob(startParam));
-                    const totalSpent = parseInt(data.totalSpent) || 0;
-                    const orderCount = parseInt(data.orderCount) || 0;
-                    
-                    document.getElementById('totalSpent').textContent = formatNumber(totalSpent);
-                    document.getElementById('orderCount').textContent = formatNumber(orderCount);
-                    document.getElementById('userRank').textContent = getUserTitle(totalSpent);
-                    updateProgressBar(totalSpent);
+                    document.getElementById('totalSpent').textContent = formatNumber(data.totalSpent);
+                    document.getElementById('orderCount').textContent = formatNumber(data.orderCount);
+                    document.getElementById('userRank').textContent = data.rank || '🌱 زائر جديد';
                 }
             } catch (e) {
-                console.error('Error loading user data:', e);
+                console.error('خطأ في تحميل البيانات:', e);
             }
         }
         
         function buyProduct(category, amount) {
-            if (purchaseInProgress) {
-                showError('⏳ جاري معالجة طلبك...');
+            if (processing) {
+                showMessage('⏳ جاري المعالجة...', 'error');
                 return;
             }
             
-            if (!VALID_PRICES[category]?.includes(amount)) {
-                showError('❌ بيانات غير صحيحة');
-                return;
-            }
-            
-            purchaseInProgress = true;
+            processing = true;
             
             try {
                 if (tg.HapticFeedback?.impactOccurred) {
                     tg.HapticFeedback.impactOccurred('medium');
                 }
-            } catch (e) {}
-            
-            const product = PRODUCTS[category];
-            const formattedPrice = (amount / 1000) + 'K';
-            
-            try {
+                
                 const data = JSON.stringify({
                     action: 'buy',
                     category: category,
                     amount: amount
                 });
                 
+                console.log('إرسال بيانات:', data);
                 tg.sendData(data);
-                showSuccess(`✅ تم إرسال طلب ${product.name} (${formattedPrice} ⭐)`);
+                
+                showMessage('✅ تم إرسال الطلب!', 'success');
                 
                 setTimeout(() => {
-                    purchaseInProgress = false;
+                    processing = false;
                 }, 2000);
                 
             } catch (e) {
-                console.error('Error sending data:', e);
-                showError('❌ فشل إرسال الطلب');
-                purchaseInProgress = false;
+                console.error('خطأ:', e);
+                showMessage('❌ فشل إرسال الطلب', 'error');
+                processing = false;
             }
         }
         
-        // التهيئة
         tg.ready();
         tg.expand();
         
         try {
-            if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
-            if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
+            tg.setHeaderColor('#667eea');
+            tg.setBackgroundColor('#667eea');
         } catch (e) {}
         
         loadUserData();
         
-        if (tg.MainButton) {
-            tg.MainButton.setText('🔄 تحديث البيانات');
-            tg.MainButton.show();
-            tg.MainButton.onClick(() => location.reload());
-        }
+        console.log('التطبيق جاهز');
+        console.log('InitData:', tg.initData ? 'موجود' : 'غير موجود');
     </script>
 </body>
 </html>
