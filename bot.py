@@ -180,7 +180,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.message.from_user
     payment = update.message.successful_payment
     
-    # استخراج البيانات من payload
     try:
         parts = payment.invoice_payload.split("_")
         category = parts[2]
@@ -189,10 +188,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨"})
     
-    # حفظ الطلب
     order_manager.add_order(user.id, payment.total_amount, category)
     
-    # حساب الترقية
     total = order_manager.get_total(user.id)
     old_total = total - payment.total_amount
     old_rank = get_rank(old_total)
@@ -211,7 +208,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"شكراً لك"
     )
     
-    # إشعار الأدمن
     if ADMIN_ID:
         try:
             await context.bot.send_message(
@@ -231,7 +227,6 @@ async def error_handler(update, context):
 
 # ============= التهيئة =============
 async def post_init(application):
-    # حذف webhook
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
         requests.get(url, timeout=10)
@@ -241,6 +236,33 @@ async def post_init(application):
     
     bot = await application.bot.get_me()
     logger.info(f"البوت متصل: @{bot.username}")
+
+# ============= إنشاء رابط الدفع =============
+from aiohttp import web
+
+async def create_invoice(request):
+    try:
+        category = request.query.get("category")
+        amount = int(request.query.get("amount", 0))
+        
+        if not validate_price(category, amount):
+            return web.json_response({"error": "invalid parameters"}, status=400)
+
+        product = PRODUCTS[category]
+
+        link = await request.app.bot.create_invoice_link(
+            title=f"{product['emoji']} {product['name']}",
+            description=f"{product['desc']}",
+            payload=f"web_{category}_{amount}_{datetime.now().timestamp()}",
+            provider_token="XTR",
+            currency="XTR",
+            prices=[LabeledPrice("السعر", amount)]
+        )
+
+        return web.json_response({"invoiceUrl": link})
+    except Exception as e:
+        logger.error(f"خطأ إنشاء رابط الفاتورة: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 # ============= التشغيل =============
 def main():
@@ -255,7 +277,19 @@ def main():
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    logger.info("البوت يعمل")
+    # 🧩 تشغيل سيرفر ويب صغير للواجهة
+    from aiohttp import web
+    web_app = web.Application()
+    web_app.bot = app.bot
+    web_app.add_routes([web.get("/create_invoice", create_invoice)])
+
+    import threading
+    def run_web():
+        web.run_app(web_app, port=8080)
+
+    threading.Thread(target=run_web, daemon=True).start()
+    
+    logger.info("البوت يعمل 🚀")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
