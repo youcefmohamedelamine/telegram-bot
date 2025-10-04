@@ -12,7 +12,22 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-
+def main():
+    if not BOT_TOKEN or len(BOT_TOKEN) < 40:
+        logger.error("❌ BOT_TOKEN غير صحيح أو غير موجود")
+        logger.error("يرجى تعيين BOT_TOKEN في متغيرات البيئة")
+        sys.exit(1)
+    
+    # حذف الـ webhook إن وجد
+    import requests
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        requests.get(url, timeout=10)
+        logger.info("✅ تم حذف webhook")
+    except:
+        pass
+    
+    logger.info("🚀 جاري تشغيل البوت...")
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
