@@ -2,7 +2,6 @@ import logging
 import json
 import os
 import sys
-import requests
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, WebAppInfo
 from telegram.ext import (
@@ -112,38 +111,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = user.id
     
-    # معالجة الشراء من Web App
-    if context.args and len(context.args) > 0:
-        arg = context.args[0]
-        if arg.startswith('buy_'):
-            try:
-                parts = arg.split('_')
-                category = parts[1]
-                amount = int(parts[2])
-                
-                if not validate_price(category, amount):
-                    await update.message.reply_text("❌ بيانات غير صحيحة")
-                    return
-                
-                product = PRODUCTS[category]
-                
-                # إرسال الفاتورة مباشرة
-                await update.message.reply_invoice(
-                    title=f"{product['emoji']} {product['name']}",
-                    description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
-                    payload=f"order_{user_id}_{category}_{amount}_{datetime.now().timestamp()}",
-                    provider_token="XTR",
-                    currency="XTR",
-                    prices=[LabeledPrice("السعر", amount)],
-                    max_tip_amount=50000,
-                    suggested_tip_amounts=[1000, 5000, 10000, 25000]
-                )
-                logger.info(f"فاتورة: {user_id} - {category} - {amount}")
-                return
-            except Exception as e:
-                logger.error(f"خطأ deep link: {e}")
-    
-    # الرسالة الرئيسية
     total = order_manager.get_total(user_id)
     count = order_manager.get_count(user_id)
     rank = get_rank(total)
@@ -169,6 +136,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"اضغط الزر للدخول",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+# ============= معالج البيانات من Web App =============
+async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالج البيانات المرسلة من Web App"""
+    try:
+        data = json.loads(update.message.web_app_data.data)
+        action = data.get('action')
+        
+        if action == 'buy':
+            category = data.get('category')
+            amount = int(data.get('amount', 0))
+            user_id = update.message.from_user.id
+            
+            # التحقق من صحة البيانات
+            if not validate_price(category, amount):
+                await update.message.reply_text("❌ بيانات غير صحيحة")
+                return
+            
+            product = PRODUCTS[category]
+            
+            # إرسال الفاتورة مباشرة
+            await update.message.reply_invoice(
+                title=f"{product['emoji']} {product['name']}",
+                description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
+                payload=f"order_{user_id}_{category}_{amount}_{datetime.now().timestamp()}",
+                provider_token="",  # فارغ لأننا نستخدم Telegram Stars
+                currency="XTR",
+                prices=[LabeledPrice("السعر", amount)],
+                max_tip_amount=50000,
+                suggested_tip_amounts=[1000, 5000, 10000, 25000]
+            )
+            
+            logger.info(f"فاتورة مرسلة: {user_id} - {category} - {amount}")
+            
+    except json.JSONDecodeError as e:
+        logger.error(f"خطأ في تحليل البيانات: {e}")
+        await update.message.reply_text("❌ خطأ في البيانات المرسلة")
+    except Exception as e:
+        logger.error(f"خطأ في معالج Web App: {e}")
+        await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
 
 # ============= معالج التحقق قبل الدفع =============
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -201,95 +208,61 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text(
         f"✅ تم الدفع بنجاح!\n\n"
-        f"📦 {product['name']}\n"
+        f"📦 {product['emoji']} {product['name']}\n"
         f"💰 {payment.total_amount:,} ⭐\n\n"
         f"🏷️ لقبك: {new_rank}\n"
         f"💎 الإجمالي: {total:,} ⭐{rank_up}\n\n"
-        f"شكراً لك"
+        f"شكراً لك ❤️"
     )
     
+    # إشعار للأدمن
     if ADMIN_ID:
         try:
             await context.bot.send_message(
                 ADMIN_ID,
                 f"📢 طلب جديد!\n\n"
-                f"👤 {user.first_name}\n"
+                f"👤 {user.first_name} (@{user.username or 'لا يوجد'})\n"
                 f"🆔 {user.id}\n"
-                f"📦 {product['name']}\n"
+                f"📦 {product['emoji']} {product['name']}\n"
                 f"💰 {payment.total_amount:,} ⭐"
             )
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"خطأ في إرسال إشعار للأدمن: {e}")
 
 # ============= معالج الأخطاء =============
 async def error_handler(update, context):
     logger.error(f"خطأ: {context.error}")
+    try:
+        if update and update.message:
+            await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
+    except:
+        pass
 
 # ============= التهيئة =============
 async def post_init(application):
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
-        requests.get(url, timeout=10)
-        logger.info("تم حذف webhook")
-    except:
-        pass
-    
     bot = await application.bot.get_me()
     logger.info(f"البوت متصل: @{bot.username}")
-
-# ============= إنشاء رابط الدفع =============
-from aiohttp import web
-
-async def create_invoice(request):
-    try:
-        category = request.query.get("category")
-        amount = int(request.query.get("amount", 0))
-        
-        if not validate_price(category, amount):
-            return web.json_response({"error": "invalid parameters"}, status=400)
-
-        product = PRODUCTS[category]
-
-        link = await request.app.bot.create_invoice_link(
-            title=f"{product['emoji']} {product['name']}",
-            description=f"{product['desc']}",
-            payload=f"web_{category}_{amount}_{datetime.now().timestamp()}",
-            provider_token="XTR",
-            currency="XTR",
-            prices=[LabeledPrice("السعر", amount)]
-        )
-
-        return web.json_response({"invoiceUrl": link})
-    except Exception as e:
-        logger.error(f"خطأ إنشاء رابط الفاتورة: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+    logger.info(f"البوت ID: {bot.id}")
 
 # ============= التشغيل =============
 def main():
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
-        logger.error("BOT_TOKEN غير صحيح")
+        logger.error("❌ BOT_TOKEN غير صحيح")
+        logger.error("يرجى تعيين BOT_TOKEN في متغيرات البيئة")
         sys.exit(1)
     
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
+    # إضافة المعالجات
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    # 🧩 تشغيل سيرفر ويب صغير للواجهة
-    from aiohttp import web
-    web_app = web.Application()
-    web_app.bot = app.bot
-    web_app.add_routes([web.get("/create_invoice", create_invoice)])
-
-    import threading
-    def run_web():
-        web.run_app(web_app, port=8080)
-
-    threading.Thread(target=run_web, daemon=True).start()
+    logger.info("🚀 البوت يعمل الآن...")
+    logger.info("اضغط Ctrl+C للإيقاف")
     
-    logger.info("البوت يعمل 🚀")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
