@@ -12,25 +12,13 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-def main():
-    if not BOT_TOKEN or len(BOT_TOKEN) < 40:
-        logger.error("❌ BOT_TOKEN غير صحيح أو غير موجود")
-        logger.error("يرجى تعيين BOT_TOKEN في متغيرات البيئة")
-        sys.exit(1)
-    
-    # حذف الـ webhook إن وجد
-    import requests
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
-        requests.get(url, timeout=10)
-        logger.info("✅ تم حذف webhook")
-    except:
-        pass
-    
-    logger.info("🚀 جاري تشغيل البوت...")
+from aiohttp import web
+
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()  # مثلاً: https://yourdomain.com
+PORT = int(os.getenv("PORT", 8080))
 ORDERS_FILE = "orders.json"
 WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
@@ -131,7 +119,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = order_manager.get_count(user_id)
     rank = get_rank(total)
     
-    # تشفير بيانات المستخدم
     import base64
     user_data = {
         "totalSpent": total,
@@ -174,7 +161,6 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             product = PRODUCTS[category]
             
-            # إرسال الفاتورة
             await update.message.reply_invoice(
                 title=f"{product['emoji']} {product['name']}",
                 description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
@@ -214,10 +200,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨"})
     
-    # حفظ الطلب
     order_manager.add_order(user.id, payment.total_amount, category)
     
-    # حساب الترقية
     total = order_manager.get_total(user.id)
     old_total = total - payment.total_amount
     old_rank = get_rank(old_total)
@@ -238,7 +222,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     logger.info(f"دفع ناجح: {user.id} - {category} - {payment.total_amount}")
     
-    # إشعار للأدمن
     if ADMIN_ID:
         try:
             await context.bot.send_message(
@@ -273,7 +256,6 @@ async def post_init(application):
 def main():
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
         logger.error("❌ BOT_TOKEN غير صحيح أو غير موجود")
-        logger.error("يرجى تعيين BOT_TOKEN في متغيرات البيئة")
         sys.exit(1)
     
     logger.info("🚀 جاري تشغيل البوت...")
@@ -287,11 +269,38 @@ def main():
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    logger.info("✅ البوت يعمل الآن...")
-    logger.info("اضغط Ctrl+C للإيقاف")
-    
-    # تشغيل البوت مع حذف التحديثات القديمة
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    # اختيار الطريقة حسب وجود WEBHOOK_URL
+    if WEBHOOK_URL:
+        logger.info(f"🌐 استخدام Webhook: {WEBHOOK_URL}")
+        logger.info(f"🔌 المنفذ: {PORT}")
+        
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=BOT_TOKEN,
+            webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
+            drop_pending_updates=True
+        )
+    else:
+        logger.info("📡 استخدام Polling")
+        logger.info("⚠️ تحذير: قد يحدث تعارض إذا كان هناك webhook مفعل")
+        
+        # حذف الـ webhook إن وجد
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(
+            app.bot.delete_webhook(drop_pending_updates=True)
+        )
+        logger.info("✅ تم حذف webhook")
+        
+        logger.info("✅ البوت يعمل الآن...")
+        logger.info("اضغط Ctrl+C للإيقاف")
+        
+        app.run_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+            timeout=30,
+            poll_interval=0.0
+        )
 
 if __name__ == "__main__":
     main()
