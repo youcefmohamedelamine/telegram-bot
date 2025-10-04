@@ -59,8 +59,8 @@ class OrderManager:
             try:
                 with open(ORDERS_FILE, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"خطأ في تحميل الطلبات: {e}")
         return {}
     
     def save(self):
@@ -68,7 +68,7 @@ class OrderManager:
             with open(ORDERS_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.orders, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"خطأ حفظ: {e}")
+            logger.error(f"خطأ في حفظ الطلبات: {e}")
     
     def add_order(self, user_id, amount, category):
         user_id = str(user_id)
@@ -81,6 +81,7 @@ class OrderManager:
             "category": category
         })
         self.save()
+        logger.info(f"تم إضافة طلب: {user_id} - {category} - {amount}")
     
     def get_total(self, user_id):
         user_id = str(user_id)
@@ -115,7 +116,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = order_manager.get_count(user_id)
     rank = get_rank(total)
     
-    # تشفير البيانات للـ Web App
+    # تشفير بيانات المستخدم
     import base64
     user_data = {
         "totalSpent": total,
@@ -133,54 +134,57 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{rank}\n"
         f"💰 إنفاقك: {total:,} ⭐\n"
         f"📦 طلباتك: {count}\n\n"
-        f"اضغط الزر للدخول",
+        f"اضغط الزر للدخول إلى المتجر",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    logger.info(f"مستخدم دخل: {user.id} - {user.first_name}")
 
 # ============= معالج البيانات من Web App =============
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج البيانات المرسلة من Web App"""
     try:
         data = json.loads(update.message.web_app_data.data)
         action = data.get('action')
+        user = update.message.from_user
+        
+        logger.info(f"استقبال بيانات من Web App: {data}")
         
         if action == 'buy':
             category = data.get('category')
             amount = int(data.get('amount', 0))
-            user_id = update.message.from_user.id
             
-            # التحقق من صحة البيانات
             if not validate_price(category, amount):
                 await update.message.reply_text("❌ بيانات غير صحيحة")
+                logger.warning(f"محاولة شراء بمعلومات خاطئة: {user.id} - {category} - {amount}")
                 return
             
             product = PRODUCTS[category]
             
-            # إرسال الفاتورة مباشرة
+            # إرسال الفاتورة
             await update.message.reply_invoice(
                 title=f"{product['emoji']} {product['name']}",
                 description=f"✨ {product['desc']}\n\n🎁 ستحصل على:\n• ملكية حصرية للاشيء\n• ترقية اللقب التلقائية\n• دعم فني مميز",
-                payload=f"order_{user_id}_{category}_{amount}_{datetime.now().timestamp()}",
-                provider_token="",  # فارغ لأننا نستخدم Telegram Stars
+                payload=f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}",
+                provider_token="",
                 currency="XTR",
                 prices=[LabeledPrice("السعر", amount)],
                 max_tip_amount=50000,
                 suggested_tip_amounts=[1000, 5000, 10000, 25000]
             )
             
-            logger.info(f"فاتورة مرسلة: {user_id} - {category} - {amount}")
+            logger.info(f"تم إرسال فاتورة: {user.id} - {category} - {amount}")
             
     except json.JSONDecodeError as e:
-        logger.error(f"خطأ في تحليل البيانات: {e}")
+        logger.error(f"خطأ في تحليل JSON: {e}")
         await update.message.reply_text("❌ خطأ في البيانات المرسلة")
     except Exception as e:
-        logger.error(f"خطأ في معالج Web App: {e}")
+        logger.error(f"خطأ في معالج Web App: {e}", exc_info=True)
         await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
 
 # ============= معالج التحقق قبل الدفع =============
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     await query.answer(ok=True)
+    logger.info(f"تم التحقق من الدفع: {query.from_user.id}")
 
 # ============= معالج الدفع الناجح =============
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -195,8 +199,10 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨"})
     
+    # حفظ الطلب
     order_manager.add_order(user.id, payment.total_amount, category)
     
+    # حساب الترقية
     total = order_manager.get_total(user.id)
     old_total = total - payment.total_amount
     old_rank = get_rank(old_total)
@@ -215,6 +221,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"شكراً لك ❤️"
     )
     
+    logger.info(f"دفع ناجح: {user.id} - {category} - {payment.total_amount}")
+    
     # إشعار للأدمن
     if ADMIN_ID:
         try:
@@ -224,14 +232,15 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 f"👤 {user.first_name} (@{user.username or 'لا يوجد'})\n"
                 f"🆔 {user.id}\n"
                 f"📦 {product['emoji']} {product['name']}\n"
-                f"💰 {payment.total_amount:,} ⭐"
+                f"💰 {payment.total_amount:,} ⭐\n"
+                f"🏷️ اللقب: {new_rank}"
             )
         except Exception as e:
             logger.error(f"خطأ في إرسال إشعار للأدمن: {e}")
 
 # ============= معالج الأخطاء =============
 async def error_handler(update, context):
-    logger.error(f"خطأ: {context.error}")
+    logger.error(f"خطأ: {context.error}", exc_info=context.error)
     try:
         if update and update.message:
             await update.message.reply_text("❌ حدث خطأ، حاول مرة أخرى")
@@ -241,15 +250,18 @@ async def error_handler(update, context):
 # ============= التهيئة =============
 async def post_init(application):
     bot = await application.bot.get_me()
-    logger.info(f"البوت متصل: @{bot.username}")
-    logger.info(f"البوت ID: {bot.id}")
+    logger.info(f"✅ البوت متصل: @{bot.username}")
+    logger.info(f"🆔 البوت ID: {bot.id}")
+    logger.info(f"📊 عدد الطلبات المحفوظة: {len(order_manager.orders)}")
 
 # ============= التشغيل =============
 def main():
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
-        logger.error("❌ BOT_TOKEN غير صحيح")
+        logger.error("❌ BOT_TOKEN غير صحيح أو غير موجود")
         logger.error("يرجى تعيين BOT_TOKEN في متغيرات البيئة")
         sys.exit(1)
+    
+    logger.info("🚀 جاري تشغيل البوت...")
     
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
@@ -260,10 +272,11 @@ def main():
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
-    logger.info("🚀 البوت يعمل الآن...")
+    logger.info("✅ البوت يعمل الآن...")
     logger.info("اضغط Ctrl+C للإيقاف")
     
-    app.run_polling(drop_pending_updates=True)
+    # تشغيل البوت مع حذف التحديثات القديمة
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
