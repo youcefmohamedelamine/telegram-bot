@@ -249,7 +249,6 @@ def main():
         sys.exit(1)
     
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-
     
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
