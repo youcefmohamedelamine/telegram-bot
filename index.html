@@ -240,16 +240,6 @@
             animation: shake 0.5s;
         }
         
-        .loading {
-            text-align: center;
-            padding: 40px 0;
-            font-size: 1.2em;
-        }
-        
-        .floating {
-            animation: floating 3s ease-in-out infinite;
-        }
-        
         @keyframes fadeInDown {
             from {
                 opacity: 0;
@@ -272,15 +262,6 @@
             }
         }
         
-        @keyframes floating {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-8px);
-            }
-        }
-        
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             25% { transform: translateX(-10px); }
@@ -290,7 +271,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="header floating">
+        <div class="header">
             <h1>🌟 متجر اللاشيء 🌟</h1>
             <p class="subtitle">امتلك العدم بأفضل الأسعار</p>
         </div>
@@ -369,12 +350,11 @@
     </div>
     
     <script>
-        // ============= المتغيرات العامة =============
+        // تعريف جميع المتغيرات والدوال بالترتيب الصحيح
         let tg = null;
         let isInitialized = false;
         let purchaseInProgress = false;
         
-        // ============= البيانات الثابتة =============
         const PRODUCTS = {
             'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
             'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
@@ -398,43 +378,42 @@
             {threshold: 0, name: '🌱 زائر جديد'}
         ];
         
-        const BOT_USERNAME = 'WinterLand_bot'; // استبدلها باسم البوت الخاص بك
+        // ضع اسم البوت الخاص بك هنا
+        const BOT_USERNAME = 'WinterLand_bot';
         
-        // ============= دوال مساعدة =============
+        // الدوال المساعدة
         function showError(message) {
             try {
                 const errorEl = document.getElementById('errorMessage');
                 if (errorEl) {
                     errorEl.textContent = message || '❌ حدث خطأ! حاول مرة أخرى';
                     errorEl.classList.add('show');
-                    
-                    setTimeout(() => {
-                        errorEl.classList.remove('show');
-                    }, 3000);
+                    setTimeout(() => errorEl.classList.remove('show'), 3000);
                 }
             } catch (e) {
-                console.error('Error showing error message:', e);
+                console.error('Error showing error:', e);
             }
         }
         
         function sanitizeText(text, maxLength = 100) {
             try {
-                if (typeof text !== 'string') {
-                    return 'مستخدم';
-                }
-                
+                if (typeof text !== 'string') return 'مستخدم';
                 text = text.trim();
-                if (text.length > maxLength) {
-                    text = text.substring(0, maxLength);
-                }
-                
-                // إزالة HTML tags
+                if (text.length > maxLength) text = text.substring(0, maxLength);
                 const div = document.createElement('div');
                 div.textContent = text;
                 return div.textContent || 'مستخدم';
             } catch (e) {
-                console.error('Error sanitizing text:', e);
                 return 'مستخدم';
+            }
+        }
+        
+        function safeSetText(elementId, text) {
+            try {
+                const element = document.getElementById(elementId);
+                if (element) element.textContent = sanitizeText(String(text));
+            } catch (e) {
+                console.error(`Error setting text for ${elementId}:`, e);
             }
         }
         
@@ -451,64 +430,67 @@
         function getUserTitle(totalSpent) {
             try {
                 const spent = parseInt(totalSpent) || 0;
-                
                 for (let rank of RANKS) {
-                    if (spent >= rank.threshold) {
-                        return rank.name;
-                    }
+                    if (spent >= rank.threshold) return rank.name;
                 }
-                
                 return RANKS[RANKS.length - 1].name;
             } catch (e) {
-                console.error('Error getting user title:', e);
                 return '🌱 زائر جديد';
             }
         }
         
         function validatePrice(category, amount) {
             try {
-                if (!category || !VALID_PRICES[category]) {
-                    return false;
-                }
-                
+                if (!category || !VALID_PRICES[category]) return false;
                 const price = parseInt(amount);
-                if (isNaN(price)) {
-                    return false;
-                }
-                
+                if (isNaN(price)) return false;
                 return VALID_PRICES[category].includes(price);
             } catch (e) {
-                console.error('Error validating price:', e);
                 return false;
             }
         }
         
-        // ============= تحميل بيانات المستخدم =============
+        function initTelegram() {
+            try {
+                if (!window.Telegram || !window.Telegram.WebApp) {
+                    console.error('Telegram WebApp not available');
+                    return false;
+                }
+                
+                tg = window.Telegram.WebApp;
+                tg.expand();
+                
+                try {
+                    if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
+                    if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
+                } catch (e) {
+                    console.warn('Could not set colors:', e);
+                }
+                
+                isInitialized = true;
+                return true;
+            } catch (e) {
+                console.error('Error initializing Telegram:', e);
+                return false;
+            }
+        }
+        
         function loadUserData() {
             try {
                 if (!tg) {
-                    console.error('Telegram not initialized');
-                    updateUserInterface({
-                        totalSpent: 0,
-                        orderCount: 0,
-                        rank: '🌱 زائر جديد'
-                    });
+                    updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
                     return;
                 }
                 
-                // الحصول على بيانات المستخدم
                 const user = tg.initDataUnsafe?.user;
                 if (user && user.first_name) {
                     safeSetText('userName', user.first_name);
                 }
                 
-                // محاولة تحميل البيانات من start_param
                 try {
                     const startParam = tg.initDataUnsafe?.start_param;
                     if (startParam && startParam.length > 0) {
                         const data = JSON.parse(atob(startParam));
-                        
-                        // التحقق من صحة البيانات
                         if (data && typeof data === 'object') {
                             updateUserInterface(data);
                             return;
@@ -518,125 +500,85 @@
                     console.log('Error parsing start param:', e);
                 }
                 
-                // البيانات الافتراضية
-                updateUserInterface({
-                    totalSpent: 0,
-                    orderCount: 0,
-                    rank: '🌱 زائر جديد'
-                });
-                
+                updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
             } catch (e) {
                 console.error('Error loading user data:', e);
-                showError('❌ خطأ في تحميل البيانات');
-                
-                // البيانات الافتراضية في حالة الخطأ
-                updateUserInterface({
-                    totalSpent: 0,
-                    orderCount: 0,
-                    rank: '🌱 زائر جديد'
-                });
+                updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
             }
         }
         
-        // ============= تحديث واجهة المستخدم =============
         function updateUserInterface(data) {
             try {
-                // التحقق من صحة البيانات
-                if (!data || typeof data !== 'object') {
-                    console.error('Invalid data object');
-                    return;
-                }
+                if (!data || typeof data !== 'object') return;
                 
                 const totalSpent = parseInt(data.totalSpent) || 0;
                 const orderCount = parseInt(data.orderCount) || 0;
                 
-                // تحديث الإحصائيات
                 safeSetText('totalSpent', formatNumber(totalSpent));
                 safeSetText('orderCount', formatNumber(orderCount));
                 
-                // تحديث الرتبة
                 const rank = getUserTitle(totalSpent);
                 safeSetText('userRank', rank);
                 
-                // تحديث شريط التقدم
                 updateProgressBar(totalSpent);
-                
             } catch (e) {
-                console.error('Error updating user interface:', e);
-                showError('❌ خطأ في تحديث الواجهة');
+                console.error('Error updating UI:', e);
             }
         }
         
-        // ============= تحديث شريط التقدم =============
         function updateProgressBar(totalSpent) {
             try {
                 const spent = parseInt(totalSpent) || 0;
                 let nextRank = null;
                 
-                // البحث عن الرتبة القادمة
                 for (let rank of RANKS) {
-                    if (spent < rank.threshold) {
-                        nextRank = rank;
-                    }
+                    if (spent < rank.threshold) nextRank = rank;
                 }
                 
                 const progressBar = document.getElementById('progressBar');
                 const progressText = document.getElementById('progressText');
                 const nextRankEl = document.getElementById('nextRank');
                 
-                if (!progressBar || !progressText || !nextRankEl) {
-                    console.error('Progress elements not found');
-                    return;
-                }
+                if (!progressBar || !progressText || !nextRankEl) return;
                 
                 if (nextRank) {
-                    // حساب التقدم
                     const progress = Math.min(100, (spent / nextRank.threshold) * 100);
                     const progressRounded = Math.round(progress);
-                    
                     progressBar.style.width = progress + '%';
                     progressText.textContent = progressRounded + '%';
                     nextRankEl.textContent = `🎯 اللقب القادم: ${nextRank.name}`;
                 } else {
-                    // وصل لأعلى رتبة
                     progressBar.style.width = '100%';
                     progressText.textContent = '100%';
                     nextRankEl.textContent = '🎉 وصلت لأعلى لقب!';
                 }
-                
             } catch (e) {
-                console.error('Error updating progress bar:', e);
+                console.error('Error updating progress:', e);
             }
         }
         
-        // ============= دالة الشراء المحصنة =============
         function buyProduct(category, amount) {
             try {
-                // منع الشراء المزدوج
                 if (purchaseInProgress) {
                     showError('⏳ جاري معالجة طلبك...');
                     return;
                 }
                 
-                // التحقق من صحة المدخلات
                 if (!category || !amount) {
                     showError('❌ بيانات غير صحيحة');
                     return;
                 }
                 
-                // التحقق من صحة الفئة
                 if (!PRODUCTS[category]) {
                     showError('❌ منتج غير صحيح');
                     return;
                 }
                 
-                // التحقق من صحة السعر
                 if (!validatePrice(category, amount)) {
                     showError('❌ سعر غير صحيح');
                     return;
                 }
                 
-                // التحقق من تهيئة Telegram
                 if (!tg || !isInitialized) {
                     showError('❌ خطأ في الاتصال بتيليجرام');
                     return;
@@ -644,19 +586,15 @@
                 
                 purchaseInProgress = true;
                 
-                // Haptic feedback
                 try {
                     if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
                         tg.HapticFeedback.impactOccurred('medium');
                     }
-                } catch (e) {
-                    console.warn('Haptic feedback not available:', e);
-                }
+                } catch (e) {}
                 
                 const product = PRODUCTS[category];
                 const formattedPrice = (amount / 1000).toFixed(0) + 'K';
                 
-                // عرض رسالة قبل الانتقال
                 try {
                     if (tg.showPopup) {
                         tg.showPopup({
@@ -674,14 +612,11 @@
                             }
                         });
                     } else {
-                        // مباشرة إذا showPopup غير متاح
                         openInvoice(category, amount);
                     }
                 } catch (e) {
-                    console.warn('showPopup not available:', e);
                     openInvoice(category, amount);
                 }
-                
             } catch (e) {
                 console.error('Error in buyProduct:', e);
                 showError('❌ حدث خطأ في عملية الشراء');
@@ -691,10 +626,8 @@
         
         function openInvoice(category, amount) {
             try {
-                // إنشاء deep link
                 const deepLink = `https://t.me/${BOT_USERNAME}?start=buy_${category}_${amount}`;
                 
-                // إغلاق Web App وفتح البوت
                 try {
                     tg.close();
                     if (tg.openLink) {
@@ -709,221 +642,64 @@
                     showError('❌ خطأ في فتح البوت');
                 }
                 
-                // إعادة تعيين حالة الشراء
                 setTimeout(() => {
                     purchaseInProgress = false;
                 }, 2000);
-                
             } catch (e) {
                 console.error('Error opening invoice:', e);
                 purchaseInProgress = false;
             }
         }
         
-        // ============= إعداد الأزرار =============
         function setupButtons() {
             try {
                 if (!tg) return;
                 
-                // زر التحديث
                 try {
                     if (tg.MainButton) {
                         tg.MainButton.setText('🔄 تحديث البيانات');
                         tg.MainButton.show();
-                        tg.MainButton.onClick(handleRefresh);
+                        tg.MainButton.onClick(() => location.reload());
                     }
-                } catch (e) {
-                    console.warn('Could not setup MainButton:', e);
-                }
+                } catch (e) {}
                 
-                // زر الرجوع
                 try {
                     if (tg.BackButton) {
                         tg.BackButton.show();
-                        tg.BackButton.onClick(handleBack);
+                        tg.BackButton.onClick(() => tg.close());
                     }
-                } catch (e) {
-                    console.warn('Could not setup BackButton:', e);
-                }
-                
+                } catch (e) {}
             } catch (e) {
                 console.error('Error setting up buttons:', e);
             }
         }
         
-        // ============= معالجات الأزرار =============
-        function handleRefresh() {
-            try {
-                // Haptic feedback
-                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
-                    tg.HapticFeedback.impactOccurred('light');
-                }
-                
-                // إعادة تحميل الصفحة
-                location.reload();
-            } catch (e) {
-                console.error('Error refreshing:', e);
-                showError('❌ خطأ في التحديث');
-            }
-        }
-        
-        function handleBack() {
-            try {
-                if (tg && tg.close) {
-                    tg.close();
-                } else {
-                    // Fallback
-                    window.history.back();
-                }
-            } catch (e) {
-                console.error('Error going back:', e);
-            }
-        }
-        
-        // ============= تعطيل الأزرار أثناء التحميل =============
-        function setButtonsDisabled(disabled) {
-            try {
-                const buttons = document.querySelectorAll('.price-btn');
-                buttons.forEach(button => {
-                    button.disabled = disabled;
-                });
-            } catch (e) {
-                console.error('Error setting buttons disabled:', e);
-            }
-        }
-        
-        // ============= معالج الأخطاء العام =============
-        window.addEventListener('error', function(event) {
-            console.error('Global error:', event.error);
-            showError('❌ حدث خطأ غير متوقع');
-        });
-        
-        window.addEventListener('unhandledrejection', function(event) {
-            console.error('Unhandled promise rejection:', event.reason);
-            showError('❌ حدث خطأ في الاتصال');
-        });
-        
-        // ============= تهيئة التطبيق =============
         function initApp() {
             try {
-                console.log('Initializing app...');
-                
-                // تهيئة Telegram
                 if (!initTelegram()) {
-                    console.error('Failed to initialize Telegram');
                     showError('❌ خطأ في الاتصال بتيليجرام');
                     return;
                 }
                 
-                console.log('Telegram initialized successfully');
-                
-                // تحميل بيانات المستخدم
                 loadUserData();
-                
-                // إعداد الأزرار
                 setupButtons();
-                
-                // تفعيل الأزرار
-                setButtonsDisabled(false);
-                
-                console.log('App initialized successfully');
-                
             } catch (e) {
-                console.error('Fatal error initializing app:', e);
+                console.error('Fatal error:', e);
                 showError('❌ خطأ فادح في تشغيل التطبيق');
             }
         }
         
-        // ============= انتظار تحميل الصفحة =============
+        // تشغيل التطبيق
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initApp);
         } else {
-            // الصفحة محملة بالفعل
             initApp();
         }
         
-        // ============= التحقق من Telegram WebApp كل فترة =============
-        let checkAttempts = 0;
-        const maxAttempts = 10;
-        
-        function checkTelegramAvailability() {
-            if (window.Telegram && window.Telegram.WebApp) {
-                console.log('Telegram WebApp is available');
-                return;
-            }
-            
-            checkAttempts++;
-            if (checkAttempts < maxAttempts) {
-                console.log(`Waiting for Telegram WebApp... Attempt ${checkAttempts}`);
-                setTimeout(checkTelegramAvailability, 500);
-            } else {
-                console.error('Telegram WebApp not available after maximum attempts');
-                showError('❌ فشل الاتصال بتيليجرام');
-            }
-        }
-        
-        // بدء التحقق
-        checkTelegramAvailability();
-        
-        // ============= حماية من التلاعب بـ console =============
-        (function() {
-            try {
-                // حماية بسيطة من التلاعب
-                const noop = function() {};
-                
-                if (!window.console) {
-                    window.console = {
-                        log: noop,
-                        warn: noop,
-                        error: noop,
-                        info: noop
-                    };
-                }
-            } catch (e) {
-                // Silent fail
-            }
-        })();
+        window.addEventListener('error', function(event) {
+            console.error('Global error:', event.error);
+            showError('❌ حدث خطأ غير متوقع');
+        });
     </script>
 </body>
 </html>
-        
-        function safeSetText(elementId, text) {
-            try {
-                const element = document.getElementById(elementId);
-                if (element) {
-                    element.textContent = sanitizeText(String(text));
-                }
-            } catch (e) {
-                console.error(`Error setting text for ${elementId}:`, e);
-            }
-        }
-        
-        // ============= تهيئة Telegram Web App =============
-        function initTelegram() {
-            try {
-                if (!window.Telegram || !window.Telegram.WebApp) {
-                    console.error('Telegram WebApp not available');
-                    showError('❌ خطأ في تحميل التطبيق');
-                    return false;
-                }
-                
-                tg = window.Telegram.WebApp;
-                
-                // تهيئة WebApp
-                tg.expand();
-                
-                // تعيين الألوان بشكل آمن
-                try {
-                    if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
-                    if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
-                } catch (e) {
-                    console.warn('Could not set colors:', e);
-                }
-                
-                isInitialized = true;
-                return true;
-            } catch (e) {
-                console.error('Error initializing Telegram:', e);
-                showError('❌ خطأ في الاتصال بتيليجرام');
-                return false;
-            }
