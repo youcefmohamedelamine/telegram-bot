@@ -7,7 +7,7 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 const dbFile = path.join(__dirname, 'users.json');
-const botToken = process.env.BOT_TOKEN || '7580086418:AAEE0shvKADPHNjaV-RyoBn0yO4IERyhUQQ';
+const botToken = process.env.BOT_TOKEN || 'jj';
 const bot = new TelegramBot(botToken);
 const webhookUrl = process.env.WEBHOOK_URL || 'https://nothing-store-backend.up.railway.app/bot';
 
