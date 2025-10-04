@@ -255,7 +255,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         product = PRODUCTS[category]
                         prices = [LabeledPrice(label="السعر", amount=amount)]
                         
-                        # وصف احترافي
                         description = f"""✨ {product['desc']}
 
 🎁 ستحصل على:
@@ -274,15 +273,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             prices=prices,
                             max_tip_amount=50000,
                             suggested_tip_amounts=[1000, 5000, 10000, 25000],
-                            photo_url="https://i.imgur.com/YourImage.jpg",  # اختياري: ضع صورة المنتج
-                            photo_width=512,
-                            photo_height=512,
                             need_name=False,
                             need_phone_number=False,
                             need_email=False,
                             need_shipping_address=False,
                             is_flexible=False
                         )
+                        logger.info(f"✅ فاتورة: {category} - {amount}")
+                        return
                         logger.info(f"✅ فاتورة: {category} - {amount}")
                         return
             except Exception as e:
