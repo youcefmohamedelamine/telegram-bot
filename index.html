@@ -1,108 +1,929 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<meta name="description" content="متجر اللاشيء - امتلك العدم بأفضل الأسعار">
-<title>متجر اللاشيء</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;color:white;overflow-x:hidden;padding-bottom:20px}
-.container{max-width:500px;margin:0 auto;padding:20px}
-.header{text-align:center;padding:30px 0 20px;animation:fadeInDown .8s}
-.header h1{font-size:2.2em;margin-bottom:10px;text-shadow:2px 2px 4px rgba(0,0,0,.3)}
-.header .subtitle{font-size:1em;opacity:.9}
-.profile-card{background:rgba(255,255,255,.15);backdrop-filter:blur(10px);border-radius:20px;padding:20px;margin:20px 0;box-shadow:0 8px 32px rgba(0,0,0,.1);animation:fadeInUp .8s}
-.profile-header{display:flex;align-items:center;gap:15px;margin-bottom:15px}
-.avatar{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);display:flex;align-items:center;justify-content:center;font-size:1.8em;box-shadow:0 4px 15px rgba(0,0,0,.2)}
-.profile-info h2{font-size:1.3em;margin-bottom:5px;word-wrap:break-word;max-width:300px}
-.rank-badge{display:inline-block;background:rgba(255,255,255,.25);padding:4px 12px;border-radius:20px;font-size:.85em}
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:15px}
-.stat-item{background:rgba(255,255,255,.1);padding:12px;border-radius:12px;text-align:center}
-.stat-value{font-size:1.5em;font-weight:bold;display:block;margin-bottom:3px}
-.stat-label{font-size:.85em;opacity:.8}
-.rank-progress{margin:20px 0;animation:fadeInUp 1s}
-.progress-bar{background:rgba(255,255,255,.2);height:25px;border-radius:15px;overflow:hidden;margin-bottom:8px}
-.progress-fill{background:linear-gradient(90deg,#f093fb 0%,#f5576c 100%);height:100%;transition:width 1s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:.9em;min-width:40px}
-.next-rank{text-align:center;font-size:.95em;opacity:.9}
-.products-section{margin:25px 0;animation:fadeInUp 1s}
-.section-title{font-size:1.6em;margin-bottom:18px;text-align:center;font-weight:bold}
-.product-grid{display:grid;gap:18px}
-.product-card{background:rgba(255,255,255,.15);backdrop-filter:blur(10px);border-radius:18px;padding:20px;box-shadow:0 8px 32px rgba(0,0,0,.1);transition:transform .3s,box-shadow .3s}
-.product-card:active{transform:scale(.98)}
-.product-icon{font-size:2.5em;text-align:center;margin-bottom:12px}
-.product-name{font-size:1.3em;font-weight:bold;margin-bottom:8px;text-align:center}
-.product-description{text-align:center;opacity:.9;margin-bottom:15px;font-size:.95em}
-.price-options{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
-.price-btn{background:rgba(255,255,255,.3);border:2px solid rgba(255,255,255,.5);padding:10px 18px;border-radius:12px;color:white;font-weight:bold;cursor:pointer;transition:all .3s;font-size:.95em}
-.price-btn:active{background:rgba(255,255,255,.5);transform:scale(.95)}
-.price-btn:disabled{opacity:.5;cursor:not-allowed}
-.error-message{background:rgba(255,0,0,.2);border:2px solid rgba(255,0,0,.5);border-radius:12px;padding:15px;margin:20px 0;text-align:center;display:none}
-.error-message.show{display:block;animation:shake .5s}
-@keyframes fadeInDown{from{opacity:0;transform:translateY(-30px)}to{opacity:1;transform:translateY(0)}}
-@keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
-@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-10px)}75%{transform:translateX(10px)}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="متجر اللاشيء - امتلك العدم بأفضل الأسعار">
+    <title>متجر اللاشيء</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+            overflow-x: hidden;
+            padding-bottom: 20px;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 30px 0 20px;
+            animation: fadeInDown 0.8s;
+        }
+        
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header .subtitle {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        
+        .profile-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            animation: fadeInUp 0.8s;
+        }
+        
+        .profile-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .profile-info h2 {
+            font-size: 1.3em;
+            margin-bottom: 5px;
+            word-wrap: break-word;
+            max-width: 300px;
+        }
+        
+        .rank-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.25);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 3px;
+        }
+        
+        .stat-label {
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+        
+        .rank-progress {
+            margin: 20px 0;
+            animation: fadeInUp 1s;
+        }
+        
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.2);
+            height: 25px;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+            height: 100%;
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+            min-width: 40px;
+        }
+        
+        .next-rank {
+            text-align: center;
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+        
+        .products-section {
+            margin: 25px 0;
+            animation: fadeInUp 1s;
+        }
+        
+        .section-title {
+            font-size: 1.6em;
+            margin-bottom: 18px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .product-grid {
+            display: grid;
+            gap: 18px;
+        }
+        
+        .product-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .product-card:active {
+            transform: scale(0.98);
+        }
+        
+        .product-icon {
+            font-size: 2.5em;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        
+        .product-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        
+        .product-description {
+            text-align: center;
+            opacity: 0.9;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+        }
+        
+        .price-options {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .price-btn {
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            padding: 10px 18px;
+            border-radius: 12px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.95em;
+        }
+        
+        .price-btn:active {
+            background: rgba(255, 255, 255, 0.5);
+            transform: scale(0.95);
+        }
+        
+        .price-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid rgba(255, 0, 0, 0.5);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+            animation: shake 0.5s;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px 0;
+            font-size: 1.2em;
+        }
+        
+        .floating {
+            animation: floating 3s ease-in-out infinite;
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes floating {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-8px);
+            }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+    </style>
 </head>
 <body>
-<div class="container">
-<div class="header floating">
-<h1>🌟 متجر اللاشيء 🌟</h1>
-<p class="subtitle">امتلك العدم بأفضل الأسعار</p>
-</div>
-<div class="error-message" id="errorMessage">❌ حدث خطأ! حاول مرة أخرى</div>
-<div class="profile-card">
-<div class="profile-header">
-<div class="avatar">👤</div>
-<div class="profile-info">
-<h2 id="userName">مرحباً</h2>
-<span class="rank-badge" id="userRank">🌱 زائر جديد</span>
-</div>
-</div>
-<div class="stats">
-<div class="stat-item"><span class="stat-value" id="totalSpent">0</span><span class="stat-label">⭐ إجمالي الإنفاق</span></div>
-<div class="stat-item"><span class="stat-value" id="orderCount">0</span><span class="stat-label">📦 الطلبات</span></div>
-</div>
-</div>
-<div class="rank-progress">
-<div class="progress-bar">
-<div class="progress-fill" id="progressBar" style="width:0%"><span id="progressText">0%</span></div>
-</div>
-<p class="next-rank" id="nextRank">🎯 اللقب القادم: مبتدئ اللاشيء</p>
-</div>
-<div class="products-section">
-<h2 class="section-title">🛍️ المنتجات المتاحة</h2>
-<div class="product-grid">
-<div class="product-card"><div class="product-icon">🔹</div><div class="product-name">لاشيء صغير</div><p class="product-description">مثالي للمبتدئين</p><div class="price-options"><button class="price-btn" onclick="buyProduct('small',5000)">5K ⭐</button><button class="price-btn" onclick="buyProduct('small',10000)">10K ⭐</button><button class="price-btn" onclick="buyProduct('small',15000)">15K ⭐</button></div></div>
-<div class="product-card"><div class="product-icon">🔷</div><div class="product-name">لاشيء متوسط</div><p class="product-description">الأكثر شعبية</p><div class="price-options"><button class="price-btn" onclick="buyProduct('medium',20000)">20K ⭐</button><button class="price-btn" onclick="buyProduct('medium',30000)">30K ⭐</button><button class="price-btn" onclick="buyProduct('medium',40000)">40K ⭐</button></div></div>
-<div class="product-card"><div class="product-icon">💠</div><div class="product-name">لاشيء كبير</div><p class="product-description">للمحترفين فقط</p><div class="price-options"><button class="price-btn" onclick="buyProduct('large',50000)">50K ⭐</button><button class="price-btn" onclick="buyProduct('large',75000)">75K ⭐</button><button class="price-btn" onclick="buyProduct('large',100000)">100K ⭐</button></div></div>
-</div></div></div>
-
-<script>
-let tg=null,isInitialized=false,purchaseInProgress=false;
-const PRODUCTS={small:{name:'🔹 لاشيء صغير',emoji:'🔹'},medium:{name:'🔷 لاشيء متوسط',emoji:'🔷'},large:{name:'💠 لاشيء كبير',emoji:'💠'}};
-const VALID_PRICES={small:[5000,10000,15000],medium:[20000,30000,40000],large:[50000,75000,100000]};
-const RANKS=[{threshold:500000,name:'👑 إمبراطور العدم'},{threshold:300000,name:'💎 ملك اللاشيء'},{threshold:200000,name:'🏆 أمير الفراغ'},{threshold:100000,name:'⭐ نبيل العدم'},{threshold:50000,name:'🌟 فارس اللاشيء'},{threshold:20000,name:'✨ تاجر العدم'},{threshold:10000,name:'🎯 مبتدئ اللاشيء'},{threshold:0,name:'🌱 زائر جديد'}];
-const BOT_USERNAME='WinterLand_bot';
-
-function showError(m){const e=document.getElementById('errorMessage');if(e){e.textContent=m||'❌ حدث خطأ! حاول مرة أخرى';e.classList.add('show');setTimeout(()=>e.classList.remove('show'),3000)}}
-function sanitizeText(t,m=100){if(typeof t!=='string')return'مستخدم';t=t.trim();if(t.length>m)t=t.substring(0,m);const d=document.createElement('div');d.textContent=t;return d.textContent||'مستخدم'}
-function formatNumber(n){const x=parseInt(n);return isNaN(x)?'0':x.toLocaleString('ar-EG')}
-function getUserTitle(s){const x=parseInt(s)||0;for(let r of RANKS)if(x>=r.threshold)return r.name;return RANKS[RANKS.length-1].name}
-function validatePrice(c,a){if(!c||!VALID_PRICES[c])return false;const p=parseInt(a);return !isNaN(p)&&VALID_PRICES[c].includes(p)}
-function safeSetText(id,t){const e=document.getElementById(id);if(e)e.textContent=sanitizeText(String(t))}
-function updateUserInterface(d){if(!d||typeof d!=='object')return;const s=parseInt(d.totalSpent)||0,o=parseInt(d.orderCount)||0;safeSetText('totalSpent',formatNumber(s));safeSetText('orderCount',formatNumber(o));safeSetText('userRank',getUserTitle(s));updateProgressBar(s)}
-function updateProgressBar(s){const spent=parseInt(s)||0;let next=null;for(let r of RANKS)if(spent<r.threshold)next=r;const bar=document.getElementById('progressBar'),txt=document.getElementById('progressText'),nxt=document.getElementById('nextRank');if(!bar||!txt||!nxt)return;if(next){const p=Math.min(100,(spent/next.threshold)*100);bar.style.width=p+'%';txt.textContent=Math.round(p)+'%';nxt.textContent=`🎯 اللقب القادم: ${next.name}`}else{bar.style.width='100%';txt.textContent='100%';nxt.textContent='🎉 وصلت لأعلى لقب!'}}
-function buyProduct(c,a){if(purchaseInProgress)return showError('⏳ جاري معالجة طلبك...');if(!PRODUCTS[c]||!validatePrice(c,a))return showError('❌ بيانات غير صحيحة');if(!tg||!isInitialized)return showError('❌ خطأ في الاتصال بتيليجرام');purchaseInProgress=true;try{tg.HapticFeedback?.impactOccurred('medium')}catch{}const p=PRODUCTS[c],pr=(a/1000).toFixed(0)+'K';try{tg.showPopup?tg.showPopup({title:'💫 تأكيد الشراء',message:`${p.emoji} ${p.name}\n💰 السعر: ${pr} ⭐\n\nسيتم فتح نافذة الدفع`,buttons:[{id:'buy',type:'default',text:'✅ متابعة'},{id:'cancel',type:'cancel',text:'❌ إلغاء'}]},b=>{b==='buy'?openInvoice(c,a):purchaseInProgress=false}):openInvoice(c,a)}catch{openInvoice(c,a)}}
-function openInvoice(c,a){try{const link=`https://t.me/${BOT_USERNAME}?start=buy_${c}_${a}`;try{tg.close();tg.openLink?tg.openLink(link):tg.openTelegramLink?tg.openTelegramLink(link):window.location.href=link}catch{showError('❌ خطأ في فتح البوت')}setTimeout(()=>purchaseInProgress=false,2000)}catch{purchaseInProgress=false}}
-function handleRefresh(){try{tg.HapticFeedback?.impactOccurred('light');location.reload()}catch{showError('❌ خطأ في التحديث')}}
-function handleBack(){try{tg?.close?tg.close():window.history.back()}catch{}}
-function setupButtons(){if(!tg)return;try{tg.MainButton&&(tg.MainButton.setText('🔄 تحديث البيانات'),tg.MainButton.show(),tg.MainButton.onClick(handleRefresh))}catch{}try{tg.BackButton&&(tg.BackButton.show(),tg.BackButton.onClick(handleBack))}catch{}}
-function initTelegram(){if(!window.Telegram||!window.Telegram.WebApp){showError('❌ خطأ في تحميل التطبيق');return false}tg=window.Telegram.WebApp;tg.expand();try{tg.setHeaderColor?.('#667eea');tg.setBackgroundColor?.('#667eea')}catch{}isInitialized=true;return true}
-function loadUserData(){if(!tg)return updateUserInterface({totalSpent:0,orderCount:0});const u=tg.initDataUnsafe?.user;if(u?.first_name)safeSetText('userName',u.first_name);try{const s=tg.initDataUnsafe?.start_param;if(s){const d=JSON.parse(atob(s));if(d&&typeof d==='object'){updateUserInterface(d);return}}}catch{}updateUserInterface({totalSpent:0,orderCount:0})}
-function initApp(){if(!initTelegram())return;loadUserData();setupButtons()}
-document.readyState==='loading'?document.addEventListener('DOMContentLoaded',initApp):initApp();
-</script>
+    <div class="container">
+        <div class="header floating">
+            <h1>🌟 متجر اللاشيء 🌟</h1>
+            <p class="subtitle">امتلك العدم بأفضل الأسعار</p>
+        </div>
+        
+        <div class="error-message" id="errorMessage">
+            ❌ حدث خطأ! حاول مرة أخرى
+        </div>
+        
+        <div class="profile-card">
+            <div class="profile-header">
+                <div class="avatar">👤</div>
+                <div class="profile-info">
+                    <h2 id="userName">مرحباً</h2>
+                    <span class="rank-badge" id="userRank">🌱 زائر جديد</span>
+                </div>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="totalSpent">0</span>
+                    <span class="stat-label">⭐ إجمالي الإنفاق</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="orderCount">0</span>
+                    <span class="stat-label">📦 الطلبات</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="rank-progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%">
+                    <span id="progressText">0%</span>
+                </div>
+            </div>
+            <p class="next-rank" id="nextRank">🎯 اللقب القادم: مبتدئ اللاشيء</p>
+        </div>
+        
+        <div class="products-section">
+            <h2 class="section-title">🛍️ المنتجات المتاحة</h2>
+            <div class="product-grid">
+                <div class="product-card">
+                    <div class="product-icon">🔹</div>
+                    <div class="product-name">لاشيء صغير</div>
+                    <p class="product-description">مثالي للمبتدئين</p>
+                    <div class="price-options">
+                        <button class="price-btn" onclick="buyProduct('small', 5000)">5K ⭐</button>
+                        <button class="price-btn" onclick="buyProduct('small', 10000)">10K ⭐</button>
+                        <button class="price-btn" onclick="buyProduct('small', 15000)">15K ⭐</button>
+                    </div>
+                </div>
+                
+                <div class="product-card">
+                    <div class="product-icon">🔷</div>
+                    <div class="product-name">لاشيء متوسط</div>
+                    <p class="product-description">الأكثر شعبية</p>
+                    <div class="price-options">
+                        <button class="price-btn" onclick="buyProduct('medium', 20000)">20K ⭐</button>
+                        <button class="price-btn" onclick="buyProduct('medium', 30000)">30K ⭐</button>
+                        <button class="price-btn" onclick="buyProduct('medium', 40000)">40K ⭐</button>
+                    </div>
+                </div>
+                
+                <div class="product-card">
+                    <div class="product-icon">💠</div>
+                    <div class="product-name">لاشيء كبير</div>
+                    <p class="product-description">للمحترفين فقط</p>
+                    <div class="price-options">
+                        <button class="price-btn" onclick="buyProduct('large', 50000)">50K ⭐</button>
+                        <button class="price-btn" onclick="buyProduct('large', 75000)">75K ⭐</button>
+                        <button class="price-btn" onclick="buyProduct('large', 100000)">100K ⭐</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ============= المتغيرات العامة =============
+        let tg = null;
+        let isInitialized = false;
+        let purchaseInProgress = false;
+        
+        // ============= البيانات الثابتة =============
+        const PRODUCTS = {
+            'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
+            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
+            'large': {name: '💠 لاشيء كبير', emoji: '💠'}
+        };
+        
+        const VALID_PRICES = {
+            'small': [5000, 10000, 15000],
+            'medium': [20000, 30000, 40000],
+            'large': [50000, 75000, 100000]
+        };
+        
+        const RANKS = [
+            {threshold: 500000, name: '👑 إمبراطور العدم'},
+            {threshold: 300000, name: '💎 ملك اللاشيء'},
+            {threshold: 200000, name: '🏆 أمير الفراغ'},
+            {threshold: 100000, name: '⭐ نبيل العدم'},
+            {threshold: 50000, name: '🌟 فارس اللاشيء'},
+            {threshold: 20000, name: '✨ تاجر العدم'},
+            {threshold: 10000, name: '🎯 مبتدئ اللاشيء'},
+            {threshold: 0, name: '🌱 زائر جديد'}
+        ];
+        
+        const BOT_USERNAME = 'WinterLand_bot'; // استبدلها باسم البوت الخاص بك
+        
+        // ============= دوال مساعدة =============
+        function showError(message) {
+            try {
+                const errorEl = document.getElementById('errorMessage');
+                if (errorEl) {
+                    errorEl.textContent = message || '❌ حدث خطأ! حاول مرة أخرى';
+                    errorEl.classList.add('show');
+                    
+                    setTimeout(() => {
+                        errorEl.classList.remove('show');
+                    }, 3000);
+                }
+            } catch (e) {
+                console.error('Error showing error message:', e);
+            }
+        }
+        
+        function sanitizeText(text, maxLength = 100) {
+            try {
+                if (typeof text !== 'string') {
+                    return 'مستخدم';
+                }
+                
+                text = text.trim();
+                if (text.length > maxLength) {
+                    text = text.substring(0, maxLength);
+                }
+                
+                // إزالة HTML tags
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.textContent || 'مستخدم';
+            } catch (e) {
+                console.error('Error sanitizing text:', e);
+                return 'مستخدم';
+            }
+        }
+        
+        function formatNumber(num) {
+            try {
+                const number = parseInt(num);
+                if (isNaN(number)) return '0';
+                return number.toLocaleString('ar-EG');
+            } catch (e) {
+                return '0';
+            }
+        }
+        
+        function getUserTitle(totalSpent) {
+            try {
+                const spent = parseInt(totalSpent) || 0;
+                
+                for (let rank of RANKS) {
+                    if (spent >= rank.threshold) {
+                        return rank.name;
+                    }
+                }
+                
+                return RANKS[RANKS.length - 1].name;
+            } catch (e) {
+                console.error('Error getting user title:', e);
+                return '🌱 زائر جديد';
+            }
+        }
+        
+        function validatePrice(category, amount) {
+            try {
+                if (!category || !VALID_PRICES[category]) {
+                    return false;
+                }
+                
+                const price = parseInt(amount);
+                if (isNaN(price)) {
+                    return false;
+                }
+                
+                return VALID_PRICES[category].includes(price);
+            } catch (e) {
+                console.error('Error validating price:', e);
+                return false;
+            }
+        }
+        
+        // ============= تحميل بيانات المستخدم =============
+        function loadUserData() {
+            try {
+                if (!tg) {
+                    console.error('Telegram not initialized');
+                    updateUserInterface({
+                        totalSpent: 0,
+                        orderCount: 0,
+                        rank: '🌱 زائر جديد'
+                    });
+                    return;
+                }
+                
+                // الحصول على بيانات المستخدم
+                const user = tg.initDataUnsafe?.user;
+                if (user && user.first_name) {
+                    safeSetText('userName', user.first_name);
+                }
+                
+                // محاولة تحميل البيانات من start_param
+                try {
+                    const startParam = tg.initDataUnsafe?.start_param;
+                    if (startParam && startParam.length > 0) {
+                        const data = JSON.parse(atob(startParam));
+                        
+                        // التحقق من صحة البيانات
+                        if (data && typeof data === 'object') {
+                            updateUserInterface(data);
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.log('Error parsing start param:', e);
+                }
+                
+                // البيانات الافتراضية
+                updateUserInterface({
+                    totalSpent: 0,
+                    orderCount: 0,
+                    rank: '🌱 زائر جديد'
+                });
+                
+            } catch (e) {
+                console.error('Error loading user data:', e);
+                showError('❌ خطأ في تحميل البيانات');
+                
+                // البيانات الافتراضية في حالة الخطأ
+                updateUserInterface({
+                    totalSpent: 0,
+                    orderCount: 0,
+                    rank: '🌱 زائر جديد'
+                });
+            }
+        }
+        
+        // ============= تحديث واجهة المستخدم =============
+        function updateUserInterface(data) {
+            try {
+                // التحقق من صحة البيانات
+                if (!data || typeof data !== 'object') {
+                    console.error('Invalid data object');
+                    return;
+                }
+                
+                const totalSpent = parseInt(data.totalSpent) || 0;
+                const orderCount = parseInt(data.orderCount) || 0;
+                
+                // تحديث الإحصائيات
+                safeSetText('totalSpent', formatNumber(totalSpent));
+                safeSetText('orderCount', formatNumber(orderCount));
+                
+                // تحديث الرتبة
+                const rank = getUserTitle(totalSpent);
+                safeSetText('userRank', rank);
+                
+                // تحديث شريط التقدم
+                updateProgressBar(totalSpent);
+                
+            } catch (e) {
+                console.error('Error updating user interface:', e);
+                showError('❌ خطأ في تحديث الواجهة');
+            }
+        }
+        
+        // ============= تحديث شريط التقدم =============
+        function updateProgressBar(totalSpent) {
+            try {
+                const spent = parseInt(totalSpent) || 0;
+                let nextRank = null;
+                
+                // البحث عن الرتبة القادمة
+                for (let rank of RANKS) {
+                    if (spent < rank.threshold) {
+                        nextRank = rank;
+                    }
+                }
+                
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                const nextRankEl = document.getElementById('nextRank');
+                
+                if (!progressBar || !progressText || !nextRankEl) {
+                    console.error('Progress elements not found');
+                    return;
+                }
+                
+                if (nextRank) {
+                    // حساب التقدم
+                    const progress = Math.min(100, (spent / nextRank.threshold) * 100);
+                    const progressRounded = Math.round(progress);
+                    
+                    progressBar.style.width = progress + '%';
+                    progressText.textContent = progressRounded + '%';
+                    nextRankEl.textContent = `🎯 اللقب القادم: ${nextRank.name}`;
+                } else {
+                    // وصل لأعلى رتبة
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    nextRankEl.textContent = '🎉 وصلت لأعلى لقب!';
+                }
+                
+            } catch (e) {
+                console.error('Error updating progress bar:', e);
+            }
+        }
+        
+        // ============= دالة الشراء المحصنة =============
+        function buyProduct(category, amount) {
+            try {
+                // منع الشراء المزدوج
+                if (purchaseInProgress) {
+                    showError('⏳ جاري معالجة طلبك...');
+                    return;
+                }
+                
+                // التحقق من صحة المدخلات
+                if (!category || !amount) {
+                    showError('❌ بيانات غير صحيحة');
+                    return;
+                }
+                
+                // التحقق من صحة الفئة
+                if (!PRODUCTS[category]) {
+                    showError('❌ منتج غير صحيح');
+                    return;
+                }
+                
+                // التحقق من صحة السعر
+                if (!validatePrice(category, amount)) {
+                    showError('❌ سعر غير صحيح');
+                    return;
+                }
+                
+                // التحقق من تهيئة Telegram
+                if (!tg || !isInitialized) {
+                    showError('❌ خطأ في الاتصال بتيليجرام');
+                    return;
+                }
+                
+                purchaseInProgress = true;
+                
+                // Haptic feedback
+                try {
+                    if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
+                        tg.HapticFeedback.impactOccurred('medium');
+                    }
+                } catch (e) {
+                    console.warn('Haptic feedback not available:', e);
+                }
+                
+                const product = PRODUCTS[category];
+                const formattedPrice = (amount / 1000).toFixed(0) + 'K';
+                
+                // عرض رسالة قبل الانتقال
+                try {
+                    if (tg.showPopup) {
+                        tg.showPopup({
+                            title: '💫 تأكيد الشراء',
+                            message: `${product.emoji} ${product.name}\n💰 السعر: ${formattedPrice} ⭐\n\nسيتم فتح نافذة الدفع`,
+                            buttons: [
+                                {id: 'buy', type: 'default', text: '✅ متابعة'},
+                                {id: 'cancel', type: 'cancel', text: '❌ إلغاء'}
+                            ]
+                        }, function(button_id) {
+                            if (button_id === 'buy') {
+                                openInvoice(category, amount);
+                            } else {
+                                purchaseInProgress = false;
+                            }
+                        });
+                    } else {
+                        // مباشرة إذا showPopup غير متاح
+                        openInvoice(category, amount);
+                    }
+                } catch (e) {
+                    console.warn('showPopup not available:', e);
+                    openInvoice(category, amount);
+                }
+                
+            } catch (e) {
+                console.error('Error in buyProduct:', e);
+                showError('❌ حدث خطأ في عملية الشراء');
+                purchaseInProgress = false;
+            }
+        }
+        
+        function openInvoice(category, amount) {
+            try {
+                // إنشاء deep link
+                const deepLink = `https://t.me/${BOT_USERNAME}?start=buy_${category}_${amount}`;
+                
+                // إغلاق Web App وفتح البوت
+                try {
+                    tg.close();
+                    if (tg.openLink) {
+                        tg.openLink(deepLink);
+                    } else if (tg.openTelegramLink) {
+                        tg.openTelegramLink(deepLink);
+                    } else {
+                        window.location.href = deepLink;
+                    }
+                } catch (e) {
+                    console.error('Error opening link:', e);
+                    showError('❌ خطأ في فتح البوت');
+                }
+                
+                // إعادة تعيين حالة الشراء
+                setTimeout(() => {
+                    purchaseInProgress = false;
+                }, 2000);
+                
+            } catch (e) {
+                console.error('Error opening invoice:', e);
+                purchaseInProgress = false;
+            }
+        }
+        
+        // ============= إعداد الأزرار =============
+        function setupButtons() {
+            try {
+                if (!tg) return;
+                
+                // زر التحديث
+                try {
+                    if (tg.MainButton) {
+                        tg.MainButton.setText('🔄 تحديث البيانات');
+                        tg.MainButton.show();
+                        tg.MainButton.onClick(handleRefresh);
+                    }
+                } catch (e) {
+                    console.warn('Could not setup MainButton:', e);
+                }
+                
+                // زر الرجوع
+                try {
+                    if (tg.BackButton) {
+                        tg.BackButton.show();
+                        tg.BackButton.onClick(handleBack);
+                    }
+                } catch (e) {
+                    console.warn('Could not setup BackButton:', e);
+                }
+                
+            } catch (e) {
+                console.error('Error setting up buttons:', e);
+            }
+        }
+        
+        // ============= معالجات الأزرار =============
+        function handleRefresh() {
+            try {
+                // Haptic feedback
+                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
+                    tg.HapticFeedback.impactOccurred('light');
+                }
+                
+                // إعادة تحميل الصفحة
+                location.reload();
+            } catch (e) {
+                console.error('Error refreshing:', e);
+                showError('❌ خطأ في التحديث');
+            }
+        }
+        
+        function handleBack() {
+            try {
+                if (tg && tg.close) {
+                    tg.close();
+                } else {
+                    // Fallback
+                    window.history.back();
+                }
+            } catch (e) {
+                console.error('Error going back:', e);
+            }
+        }
+        
+        // ============= تعطيل الأزرار أثناء التحميل =============
+        function setButtonsDisabled(disabled) {
+            try {
+                const buttons = document.querySelectorAll('.price-btn');
+                buttons.forEach(button => {
+                    button.disabled = disabled;
+                });
+            } catch (e) {
+                console.error('Error setting buttons disabled:', e);
+            }
+        }
+        
+        // ============= معالج الأخطاء العام =============
+        window.addEventListener('error', function(event) {
+            console.error('Global error:', event.error);
+            showError('❌ حدث خطأ غير متوقع');
+        });
+        
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError('❌ حدث خطأ في الاتصال');
+        });
+        
+        // ============= تهيئة التطبيق =============
+        function initApp() {
+            try {
+                console.log('Initializing app...');
+                
+                // تهيئة Telegram
+                if (!initTelegram()) {
+                    console.error('Failed to initialize Telegram');
+                    showError('❌ خطأ في الاتصال بتيليجرام');
+                    return;
+                }
+                
+                console.log('Telegram initialized successfully');
+                
+                // تحميل بيانات المستخدم
+                loadUserData();
+                
+                // إعداد الأزرار
+                setupButtons();
+                
+                // تفعيل الأزرار
+                setButtonsDisabled(false);
+                
+                console.log('App initialized successfully');
+                
+            } catch (e) {
+                console.error('Fatal error initializing app:', e);
+                showError('❌ خطأ فادح في تشغيل التطبيق');
+            }
+        }
+        
+        // ============= انتظار تحميل الصفحة =============
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            // الصفحة محملة بالفعل
+            initApp();
+        }
+        
+        // ============= التحقق من Telegram WebApp كل فترة =============
+        let checkAttempts = 0;
+        const maxAttempts = 10;
+        
+        function checkTelegramAvailability() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                console.log('Telegram WebApp is available');
+                return;
+            }
+            
+            checkAttempts++;
+            if (checkAttempts < maxAttempts) {
+                console.log(`Waiting for Telegram WebApp... Attempt ${checkAttempts}`);
+                setTimeout(checkTelegramAvailability, 500);
+            } else {
+                console.error('Telegram WebApp not available after maximum attempts');
+                showError('❌ فشل الاتصال بتيليجرام');
+            }
+        }
+        
+        // بدء التحقق
+        checkTelegramAvailability();
+        
+        // ============= حماية من التلاعب بـ console =============
+        (function() {
+            try {
+                // حماية بسيطة من التلاعب
+                const noop = function() {};
+                
+                if (!window.console) {
+                    window.console = {
+                        log: noop,
+                        warn: noop,
+                        error: noop,
+                        info: noop
+                    };
+                }
+            } catch (e) {
+                // Silent fail
+            }
+        })();
+    </script>
 </body>
 </html>
+        
+        function safeSetText(elementId, text) {
+            try {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.textContent = sanitizeText(String(text));
+                }
+            } catch (e) {
+                console.error(`Error setting text for ${elementId}:`, e);
+            }
+        }
+        
+        // ============= تهيئة Telegram Web App =============
+        function initTelegram() {
+            try {
+                if (!window.Telegram || !window.Telegram.WebApp) {
+                    console.error('Telegram WebApp not available');
+                    showError('❌ خطأ في تحميل التطبيق');
+                    return false;
+                }
+                
+                tg = window.Telegram.WebApp;
+                
+                // تهيئة WebApp
+                tg.expand();
+                
+                // تعيين الألوان بشكل آمن
+                try {
+                    if (tg.setHeaderColor) tg.setHeaderColor('#667eea');
+                    if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
+                } catch (e) {
+                    console.warn('Could not set colors:', e);
+                }
+                
+                isInitialized = true;
+                return true;
+            } catch (e) {
+                console.error('Error initializing Telegram:', e);
+                showError('❌ خطأ في الاتصال بتيليجرام');
+                return false;
+            }
