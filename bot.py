@@ -741,12 +741,12 @@ async def pre_shutdown(application):
         logger.info("✅ إغلاق PostgreSQL")
 
 # ============= التشغيل =============
+
 def main():
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
         logger.error("❌ BOT_TOKEN خاطئ")
         sys.exit(1)
     
-    # 🛡️ حماية 18: التحقق من WEBHOOK_SECRET
     if WEBHOOK_URL and (not WEBHOOK_SECRET or len(WEBHOOK_SECRET) < 10):
         logger.warning("⚠️ WEBHOOK_SECRET ضعيف أو مفقود!")
     
@@ -791,7 +791,7 @@ def main():
             url_path=BOT_TOKEN,
             webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
             drop_pending_updates=True,
-            allowed_updates=["message", "pre_checkout_query"],
+            allowed_updates=["message", "pre_checkout_query", "web_app_data"],  # ✅ مصلح
             secret_token=WEBHOOK_SECRET if WEBHOOK_SECRET and len(WEBHOOK_SECRET) >= 10 else None
         )
     else:
@@ -811,7 +811,7 @@ def main():
         try:
             app.run_polling(
                 drop_pending_updates=True,
-                allowed_updates=["message", "pre_checkout_query"],
+                allowed_updates=["message", "pre_checkout_query", "web_app_data"],  # ✅ مصلح
                 close_loop=False
             )
         except KeyboardInterrupt:
@@ -822,6 +822,6 @@ def main():
             loop.run_until_complete(pre_shutdown(app))
         finally:
             loop.close()
+
 if __name__ == "__main__":
     main()
-
