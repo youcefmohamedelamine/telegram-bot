@@ -8,7 +8,6 @@ from datetime import datetime
 
 # استيراد مكتبات قاعدة البيانات 
 import asyncpg
-# تم إزالة: from aiohttp import web
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
@@ -23,14 +22,15 @@ from telegram.ext import (
 # ============= الإعدادات =============
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
-# تأكد من تعيين هذا المتغير في إعدادات Railway لخدمة winter_land_bot
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").strip()
-# المنفذ الذي سيستمع إليه الخادم
 PORT = int(os.getenv("PORT", 8080))
-# تم إزالة: API_PORT
-WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
-# رابط الـ API الذي يستخدمه تطبيق الويب المصغر (WebApp) - لم يعد يُستخدم حاليًا
+# ✅✅✅ التعديل رقم 1: إضافة توكن النجوم التجريبي ✅✅✅
+# توكن مزود الدفع بالنجوم التجريبي (Sandbox) من تليجرام
+# إذا كان لديك توكن حقيقي، يمكنك تعيينه كمتغير بيئة STARS_PROVIDER_TOKEN
+STARS_PROVIDER_TOKEN = os.getenv("STARS_PROVIDER_TOKEN", "390000000:2922131602909477665").strip() 
+
+WEB_APP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 API_URL_PATH = "/api" 
 
 logging.basicConfig(
@@ -199,11 +199,12 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         product = PRODUCTS[category]
         payload = f"order_{user.id}_{category}_{amount}_{datetime.now().timestamp()}"
         
+        # ✅✅✅ التعديل رقم 2: استخدام متغير STARS_PROVIDER_TOKEN ✅✅✅
         await update.message.reply_invoice(
             title=f"{product['emoji']} {product['name']}",
             description=f"✨ {product['desc']}",
             payload=payload,
-            provider_token="", # يجب تعيين توكن مزود الدفع هنا
+            provider_token=STARS_PROVIDER_TOKEN, # 👈 تم تعيين التوكن هنا
             currency="XTR",
             prices=[{'label': "السعر", 'amount': amount}],
             max_tip_amount=50000,
@@ -278,13 +279,11 @@ async def post_init(application):
     
     bot = await application.bot.get_me()
     logger.info(f"✅ البوت: @{bot.username}")
-    # تم إزالة استدعاء خادم API المنفصل
     
     logger.info(f"🌐 WebApp: {WEB_APP_URL}")
 
 async def pre_shutdown(application):
     """قبل الإغلاق"""
-    # تم إزالة إغلاق خادم API المنفصل
     if order_manager.pool:
         await order_manager.pool.close()
         logger.info("✅ تم إغلاق اتصال PostgreSQL")
