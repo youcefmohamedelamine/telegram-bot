@@ -26,7 +26,7 @@ PROVIDER_TOKEN = ""  # فارغ للـ Telegram Stars
 ORDERS_FILE = "orders.json"
 
 # ضع رابط GitHub Pages هنا بعد النشر
-WEBAPP_URL = os.getenv("WEBAPP_URL")
+WEBAPP_URL = "https://youcefmohamedelamine.github.io/winter_land_bot/"
 
 PRODUCT_TITLE = "Buy Nothing"
 PRODUCT_DESCRIPTION = "Buying literally nothing"
