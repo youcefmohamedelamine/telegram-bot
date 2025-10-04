@@ -225,6 +225,12 @@
             cursor: not-allowed;
         }
         
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+        }
+        
         .error-message {
             background: rgba(255, 0, 0, 0.2);
             border: 2px solid rgba(255, 0, 0, 0.5);
@@ -350,15 +356,15 @@
     </div>
     
     <script>
-        // تعريف جميع المتغيرات والدوال بالترتيب الصحيح
         let tg = null;
         let isInitialized = false;
         let purchaseInProgress = false;
+        let botUsername = '';
         
         const PRODUCTS = {
-            'small': {name: '🔹 لاشيء صغير', emoji: '🔹'},
-            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷'},
-            'large': {name: '💠 لاشيء كبير', emoji: '💠'}
+            'small': {name: '🔹 لاشيء صغير', emoji: '🔹', desc: 'مثالي للمبتدئين'},
+            'medium': {name: '🔷 لاشيء متوسط', emoji: '🔷', desc: 'الأكثر شعبية'},
+            'large': {name: '💠 لاشيء كبير', emoji: '💠', desc: 'للمحترفين'}
         };
         
         const VALID_PRICES = {
@@ -378,10 +384,6 @@
             {threshold: 0, name: '🌱 زائر جديد'}
         ];
         
-        // ضع اسم البوت الخاص بك هنا
-        const BOT_USERNAME = 'WinterLand_bot';
-        
-        // الدوال المساعدة
         function showError(message) {
             try {
                 const errorEl = document.getElementById('errorMessage');
@@ -458,6 +460,7 @@
                 }
                 
                 tg = window.Telegram.WebApp;
+                tg.ready();
                 tg.expand();
                 
                 try {
@@ -465,6 +468,17 @@
                     if (tg.setBackgroundColor) tg.setBackgroundColor('#667eea');
                 } catch (e) {
                     console.warn('Could not set colors:', e);
+                }
+                
+                // استخراج اسم البوت من initData
+                try {
+                    const initData = tg.initDataUnsafe;
+                    if (initData && initData.user) {
+                        // البوت username سيأتي من backend
+                        console.log('Init data:', initData);
+                    }
+                } catch (e) {
+                    console.error('Error parsing init data:', e);
                 }
                 
                 isInitialized = true;
@@ -487,6 +501,17 @@
                     safeSetText('userName', user.first_name);
                 }
                 
+                // إرسال طلب للبوت للحصول على بيانات المستخدم
+                fetch(`https://api.telegram.org/bot${getBotToken()}/getMe`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.ok && data.result) {
+                            botUsername = data.result.username;
+                            console.log('Bot username:', botUsername);
+                        }
+                    })
+                    .catch(err => console.error('Error fetching bot info:', err));
+                
                 try {
                     const startParam = tg.initDataUnsafe?.start_param;
                     if (startParam && startParam.length > 0) {
@@ -505,6 +530,11 @@
                 console.error('Error loading user data:', e);
                 updateUserInterface({totalSpent: 0, orderCount: 0, rank: '🌱 زائر جديد'});
             }
+        }
+        
+        function getBotToken() {
+            // هذا placeholder - البوت الحقيقي سيمرر المعلومات عبر initData
+            return 'YOUR_BOT_TOKEN';
         }
         
         function updateUserInterface(data) {
@@ -557,7 +587,7 @@
             }
         }
         
-        function buyProduct(category, amount) {
+        async function buyProduct(category, amount) {
             try {
                 if (purchaseInProgress) {
                     showError('⏳ جاري معالجة طلبك...');
@@ -593,60 +623,25 @@
                 } catch (e) {}
                 
                 const product = PRODUCTS[category];
-                const formattedPrice = (amount / 1000).toFixed(0) + 'K';
                 
+                // طلب رابط الفاتورة من البوت
                 try {
-                    if (tg.showPopup) {
-                        tg.showPopup({
-                            title: '💫 تأكيد الشراء',
-                            message: `${product.emoji} ${product.name}\n💰 السعر: ${formattedPrice} ⭐\n\nسيتم فتح نافذة الدفع`,
-                            buttons: [
-                                {id: 'buy', type: 'default', text: '✅ متابعة'},
-                                {id: 'cancel', type: 'cancel', text: '❌ إلغاء'}
-                            ]
-                        }, function(button_id) {
-                            if (button_id === 'buy') {
-                                openInvoice(category, amount);
-                            } else {
-                                purchaseInProgress = false;
-                            }
-                        });
-                    } else {
-                        openInvoice(category, amount);
-                    }
+                    tg.sendData(JSON.stringify({
+                        action: 'buy',
+                        category: category,
+                        amount: amount
+                    }));
                 } catch (e) {
-                    openInvoice(category, amount);
-                }
-            } catch (e) {
-                console.error('Error in buyProduct:', e);
-                showError('❌ حدث خطأ في عملية الشراء');
-                purchaseInProgress = false;
-            }
-        }
-        
-        function openInvoice(category, amount) {
-            try {
-                const deepLink = `https://t.me/${BOT_USERNAME}?start=buy_${category}_${amount}`;
-                
-                try {
-                    tg.close();
-                    if (tg.openLink) {
-                        tg.openLink(deepLink);
-                    } else if (tg.openTelegramLink) {
-                        tg.openTelegramLink(deepLink);
-                    } else {
-                        window.location.href = deepLink;
-                    }
-                } catch (e) {
-                    console.error('Error opening link:', e);
-                    showError('❌ خطأ في فتح البوت');
+                    console.error('Error sending data to bot:', e);
+                    showError('❌ خطأ في الاتصال بالبوت');
                 }
                 
                 setTimeout(() => {
                     purchaseInProgress = false;
                 }, 2000);
             } catch (e) {
-                console.error('Error opening invoice:', e);
+                console.error('Error in buyProduct:', e);
+                showError('❌ حدث خطأ في عملية الشراء');
                 purchaseInProgress = false;
             }
         }
@@ -660,13 +655,6 @@
                         tg.MainButton.setText('🔄 تحديث البيانات');
                         tg.MainButton.show();
                         tg.MainButton.onClick(() => location.reload());
-                    }
-                } catch (e) {}
-                
-                try {
-                    if (tg.BackButton) {
-                        tg.BackButton.show();
-                        tg.BackButton.onClick(() => tg.close());
                     }
                 } catch (e) {}
             } catch (e) {
@@ -689,7 +677,6 @@
             }
         }
         
-        // تشغيل التطبيق
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initApp);
         } else {
