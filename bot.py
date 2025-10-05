@@ -7,7 +7,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ضع توكن البوت الخاص بك هنا
-BOT_TOKEN = "7580086418:AAEE0shvKADPHNjaV-RyoBn0yO4IERyhUQQ"
+BOT_TOKEN = "7580086418:AAHqVeQNSAn0q8CK7EYUZUpgKuuHUApozzE"
 
 # دالة البداية
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
