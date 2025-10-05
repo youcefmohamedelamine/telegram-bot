@@ -5,7 +5,7 @@ from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardM
 from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters, ContextTypes, CallbackQueryHandler
 
 # ============= إعدادات البوت =============
-BOT_TOKEN = "BOT_TOKEN"  # ضع توكن البوت هنا
+BOT_TOKEN = "7580086418:AAEE0shvKADPHNjaV-RyoBn0yO4IERyhUQQ"  # ضع توكن البوت هنا
 PROVIDER_TOKEN = ""  # فارغ لأن نجوم تليجرام لا تحتاج provider token
 
 class FreefireBot:
