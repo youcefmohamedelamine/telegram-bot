@@ -35,17 +35,44 @@
             font-size: 2em;
             margin-bottom: 8px;
         }
+
+        .user-stats {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .user-stats .rank {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .user-stats .stats-row {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+
+        .user-stats .stat-item {
+            text-align: center;
+        }
+
+        .user-stats .stat-value {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .user-stats .stat-label {
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
         
         .products-section {
             margin: 20px 0;
             animation: fadeInUp 1s;
-        }
-        
-        .section-title {
-            font-size: 1.4em;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: bold;
         }
         
         .product-grid {
@@ -131,6 +158,12 @@
         .selection-indicator.show {
             display: flex;
         }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.2em;
+        }
         
         @keyframes fadeInDown {
             from {
@@ -153,6 +186,20 @@
                 transform: translateY(0);
             }
         }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
     </style>
 </head>
 <body>
@@ -160,6 +207,13 @@
         <div class="header">
             <h1>🌟 متجر اللاشيء 🌟</h1>
             <p>اختر منتجاً وسعره</p>
+        </div>
+
+        <div class="user-stats" id="userStats">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>جاري التحميل...</div>
+            </div>
         </div>
         
         <div class="selection-indicator" id="selectionInfo">
@@ -220,13 +274,44 @@
     <script>
         const tg = window.Telegram.WebApp;
         
-        if (!tg) {
+        // رابط الـ Backend - غيّره لرابط السيرفر حقك
+        const API_URL = 'https://your-railway-app.railway.app';
+        
+        if (!tg || !tg.initDataUnsafe?.user) {
             document.body.innerHTML = '<div style="text-align:center;padding:50px;"><h2>❌ خطأ</h2><p>يعمل فقط في Telegram</p></div>';
             throw new Error('Telegram WebApp غير متاح');
         }
 
+        const userId = tg.initDataUnsafe.user.id.toString();
         let selectedCategory = null;
         let selectedAmount = null;
+
+        // جلب بيانات المستخدم
+        async function loadUserStats() {
+            try {
+                const response = await fetch(`${API_URL}/api/user/${userId}`);
+                const userData = await response.json();
+                
+                document.getElementById('userStats').innerHTML = `
+                    <div class="rank">${userData.rank}</div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-value">${(userData.totalSpent / 1000).toFixed(0)}K</div>
+                            <div class="stat-label">إجمالي الإنفاق ⭐</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${userData.orderCount}</div>
+                            <div class="stat-label">عدد الطلبات</div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('خطأ في جلب البيانات:', error);
+                document.getElementById('userStats').innerHTML = `
+                    <div style="color: #ffeb3b;">⚠️ تعذر تحميل الإحصائيات</div>
+                `;
+            }
+        }
 
         function updateMainButton() {
             if (selectedCategory && selectedAmount) {
@@ -265,27 +350,48 @@
             });
         });
 
-        tg.MainButton.onClick(() => {
-            if (selectedCategory && selectedAmount) {
-                console.log('إرسال البيانات:', selectedCategory, selectedAmount);
-                
-                const data = JSON.stringify({
-                    action: 'buy',
-                    category: selectedCategory,
-                    amount: selectedAmount
-                });
-                
-                console.log('JSON:', data);
-                
-                tg.sendData(data);
-                
-                console.log('تم الإرسال');
-            } else {
-                console.error('لم يتم اختيار منتج');
+        // عند الضغط على زر الشراء
+        tg.MainButton.onClick(async () => {
+            if (!selectedCategory || !selectedAmount) {
                 tg.showAlert('❌ اختر منتجاً أولاً');
+                return;
+            }
+
+            tg.MainButton.showProgress();
+            tg.MainButton.disable();
+
+            try {
+                const response = await fetch(`${API_URL}/api/buy`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        category: selectedCategory,
+                        amount: selectedAmount
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // سيتم فتح نافذة الدفع تلقائياً من البوت
+                    tg.showAlert('✅ تم إرسال فاتورة الدفع!');
+                    tg.close();
+                } else {
+                    tg.showAlert('❌ حدث خطأ: ' + (result.error || 'غير معروف'));
+                }
+            } catch (error) {
+                console.error('خطأ في الشراء:', error);
+                tg.showAlert('❌ خطأ في الاتصال بالسيرفر');
+            } finally {
+                tg.MainButton.hideProgress();
+                tg.MainButton.enable();
             }
         });
 
+        // تهيئة التطبيق
         tg.ready();
         tg.expand();
 
@@ -296,7 +402,11 @@
             console.log('تعذر تعيين الألوان');
         }
 
+        // تحميل إحصائيات المستخدم
+        loadUserStats();
+
         console.log('✅ التطبيق جاهز');
+        console.log('User ID:', userId);
     </script>
 </body>
 </html>
