@@ -10,7 +10,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # أخذ التوكن من متغيرات البيئة
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKENN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 
 if not BOT_TOKEN:
