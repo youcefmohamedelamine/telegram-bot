@@ -1,22 +1,21 @@
-# ============= Python Backend (Bot + API) =============
-# احفظ هذا الملف باسم: backend.py
-
+# ============= Python Backend (Bot + API) مع Webhook =============
 import json
 import os
 from datetime import datetime
 from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters, ContextTypes, CallbackQueryHandler
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request as flask_request
 from flask_cors import CORS
-from threading import Thread
 
 # ============= إعدادات =============
-BOT_TOKEN = "7580086418:AAEE0shvKADPHNjaV-RyoBn0yO4IERyhUQQ"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")  # مثال: https://yourapp.railway.app
+PORT = int(os.environ.get("PORT", 5000))
 PROVIDER_TOKEN = ""
 
 # ============= Flask API =============
 app = Flask(__name__)
-CORS(app)  # للسماح بطلبات React
+CORS(app)
 
 class FreefireBot:
     def __init__(self):
@@ -93,19 +92,24 @@ bot_instance = FreefireBot()
 
 # ============= API Endpoints =============
 
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "running",
+        "bot": "Free Fire Bot",
+        "api": "active"
+    })
+
 @app.route('/api/orders', methods=['GET'])
 def get_orders():
-    """الحصول على جميع الطلبات"""
     return jsonify(bot_instance.get_all_orders())
 
 @app.route('/api/statistics', methods=['GET'])
 def get_statistics():
-    """الحصول على الإحصائيات"""
     return jsonify(bot_instance.get_statistics())
 
 @app.route('/api/order/<user_id>', methods=['GET'])
 def get_order(user_id):
-    """الحصول على طلب محدد"""
     order = bot_instance.get_order(user_id)
     if order:
         return jsonify(order)
@@ -113,14 +117,12 @@ def get_order(user_id):
 
 @app.route('/api/order/<user_id>/complete', methods=['POST'])
 def complete_order(user_id):
-    """إتمام طلب"""
     if bot_instance.complete_order(user_id):
         return jsonify({"success": True, "message": "Order completed"})
     return jsonify({"error": "Order not found"}), 404
 
 @app.route('/api/order/<user_id>/delete', methods=['DELETE'])
 def delete_order(user_id):
-    """حذف طلب"""
     if str(user_id) in bot_instance.orders:
         del bot_instance.orders[str(user_id)]
         bot_instance.save_orders()
@@ -342,31 +344,62 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# ============= تشغيل البوت =============
-def run_bot():
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(show_packages, pattern="^buy$"))
-    application.add_handler(CallbackQueryHandler(process_package_selection, pattern="^package_"))
-    application.add_handler(CallbackQueryHandler(show_my_orders, pattern="^my_orders$"))
-    application.add_handler(CallbackQueryHandler(show_help, pattern="^help$"))
-    application.add_handler(CallbackQueryHandler(back_to_main, pattern="^back_to_main$"))
-    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_freefire_id))
-    
-    print("🤖 البوت يعمل الآن...")
-    application.run_polling()
+# ============= Webhook Handler =============
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    """استقبال التحديثات من تليجرام"""
+    try:
+        update = Update.de_json(flask_request.get_json(force=True), application.bot)
+        application.update_queue.put_nowait(update)
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"Error in webhook: {e}")
+        return jsonify({"ok": False}), 500
 
-# ============= تشغيل كل شيء =============
+# ============= إعداد وتشغيل البوت =============
+application = Application.builder().token(BOT_TOKEN).build()
+
+# إضافة المعالجات
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(show_packages, pattern="^buy$"))
+application.add_handler(CallbackQueryHandler(process_package_selection, pattern="^package_"))
+application.add_handler(CallbackQueryHandler(show_my_orders, pattern="^my_orders$"))
+application.add_handler(CallbackQueryHandler(show_help, pattern="^help$"))
+application.add_handler(CallbackQueryHandler(back_to_main, pattern="^back_to_main$"))
+application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_freefire_id))
+
 if __name__ == "__main__":
-    # تشغيل Flask API في thread منفصل
-    flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False))
-    flask_thread.daemon = True
-    flask_thread.start()
+    print("🚀 Starting application...")
     
-    print("🌐 API يعمل على: http://localhost:5000")
+    # تهيئة البوت
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.start())
     
-    # تشغيل البوت
-    run_bot()
+    # إعداد Webhook إذا كان متوفراً
+    if WEBHOOK_URL:
+        webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
+        loop.run_until_complete(application.bot.set_webhook(webhook_url))
+        print(f"✅ Webhook set to: {webhook_url}")
+        print(f"🌐 API يعمل على المنفذ: {PORT}")
+        
+        # تشغيل Flask
+        app.run(host='0.0.0.0', port=PORT)
+    else:
+        # استخدام Polling للتطوير المحلي
+        print("⚠️ WEBHOOK_URL not set, using polling mode")
+        print(f"🌐 API يعمل على المنفذ: {PORT}")
+        
+        # تشغيل Flask في thread منفصل
+        from threading import Thread
+        flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False))
+        flask_thread.daemon = True
+        flask_thread.start()
+        
+        print("🤖 البوت يعمل الآن...")
+        loop.run_until_complete(application.updater.start_polling())
+        loop.run_forever()
