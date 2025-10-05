@@ -227,6 +227,7 @@
 
         let selectedCategory = null;
         let selectedAmount = null;
+        let pendingInvoice = null;
 
         function updateMainButton() {
             if (selectedCategory && selectedAmount) {
@@ -265,15 +266,50 @@
             });
         });
 
-        tg.MainButton.onClick(() => {
-            if (selectedCategory && selectedAmount) {
-                const data = JSON.stringify({
-                    action: 'buy',
-                    category: selectedCategory,
-                    amount: selectedAmount
+        // عند الضغط على زر الشراء
+        tg.MainButton.onClick(async () => {
+            if (!selectedCategory || !selectedAmount) return;
+            
+            tg.MainButton.showProgress();
+            
+            try {
+                // طلب invoice link من البوت
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/createInvoiceLink`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: `${selectedCategory} Package`,
+                        description: 'Purchase from Nothing Store',
+                        payload: `${selectedCategory}_${selectedAmount}_${Date.now()}`,
+                        provider_token: '',
+                        currency: 'XTR',
+                        prices: [{label: 'Price', amount: selectedAmount}]
+                    })
                 });
                 
-                tg.sendData(data);
+                const data = await response.json();
+                
+                if (data.ok) {
+                    // فتح الفاتورة داخل WebApp
+                    tg.openInvoice(data.result, (status) => {
+                        if (status === 'paid') {
+                            tg.showAlert('✅ تم الدفع بنجاح!', () => {
+                                tg.close();
+                            });
+                        } else if (status === 'cancelled') {
+                            tg.showAlert('❌ تم إلغاء الدفع');
+                        } else if (status === 'failed') {
+                            tg.showAlert('❌ فشل الدفع');
+                        }
+                    });
+                } else {
+                    throw new Error('فشل إنشاء الفاتورة');
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+                tg.showAlert('❌ حدث خطأ، حاول مرة أخرى');
+            } finally {
+                tg.MainButton.hideProgress();
             }
         });
 
