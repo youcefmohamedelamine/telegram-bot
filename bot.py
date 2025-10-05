@@ -208,7 +208,7 @@ class OrderLock:
 
 order_lock = OrderLock()
 
-# ============= 🛡️ مدير الطلبات المحمي (حماية 6-8, 13, 19) =============
+# ============= 🛡️ مدير الطلبات المحمي والمحسّن =============
 class OrderManager:
     """
     🛡️ الحماية من:
@@ -217,6 +217,9 @@ class OrderManager:
     8. Transaction failures
     13. Integer Overflow
     19. Database Pool Exhaustion
+    + Idempotency
+    + Audit Trail
+    + Rollback Support
     """
     def __init__(self):
         self.pool = None
@@ -237,10 +240,10 @@ class OrderManager:
                     max_size=10,
                     max_inactive_connection_lifetime=300,
                     command_timeout=60,
-                    timeout=30  # 🛡️ حماية 19
+                    timeout=30
                 )
                 logger.info("✅ اتصال PostgreSQL")
-                await self.create_table()
+                await self.create_tables()
                 return
             except Exception as e:
                 logger.error(f"❌ محاولة {attempt + 1}/{self.max_retries}: {e}")
@@ -250,51 +253,42 @@ class OrderManager:
                     logger.error("❌ فشل الاتصال بقاعدة البيانات")
                     sys.exit(1)
 
-    async def create_table(self):
-        """إنشاء/تحديث جدول users بأمان"""
+    async def create_tables(self):
+        """إنشاء جداول users و orders"""
         try:
-            # الجدول الأساسي
+            # جدول users
             await self.pool.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id BIGINT PRIMARY KEY,
                     total_spent BIGINT DEFAULT 0 CHECK (total_spent >= 0),
                     order_count INT DEFAULT 0 CHECK (order_count >= 0),
                     rank TEXT NOT NULL DEFAULT 'زائر جديد 🌱',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_purchase TIMESTAMP,
+                    is_blocked BOOLEAN DEFAULT FALSE
                 )
             ''')
             
-            # إضافة الأعمدة الجديدة بأمان
+            # جدول orders للـ Audit Trail
             await self.pool.execute('''
-                DO $$ 
-                BEGIN
-                    BEGIN
-                        ALTER TABLE users ADD COLUMN last_purchase TIMESTAMP;
-                    EXCEPTION 
-                        WHEN duplicate_column THEN NULL;
-                    END;
-                    
-                    BEGIN
-                        ALTER TABLE users ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE;
-                    EXCEPTION 
-                        WHEN duplicate_column THEN NULL;
-                    END;
-                END $$;
+                CREATE TABLE IF NOT EXISTS orders (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    category TEXT NOT NULL,
+                    amount BIGINT NOT NULL,
+                    old_total BIGINT NOT NULL,
+                    new_total BIGINT NOT NULL,
+                    old_rank TEXT NOT NULL,
+                    new_rank TEXT NOT NULL,
+                    payment_charge_id TEXT,
+                    telegram_payment_charge_id TEXT,
+                    status TEXT DEFAULT 'completed',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metadata JSONB
+                )
             ''')
             
-            # تصحيح نوع last_purchase إذا كان TEXT
-            await self.pool.execute('''
-                DO $$ 
-                BEGIN
-                    ALTER TABLE users 
-                    ALTER COLUMN last_purchase TYPE TIMESTAMP 
-                    USING NULLIF(last_purchase, '')::timestamp;
-                EXCEPTION 
-                    WHEN OTHERS THEN NULL;
-                END $$;
-            ''')
-            
-            # الـ indexes
+            # Indexes
             await self.pool.execute('''
                 CREATE INDEX IF NOT EXISTS idx_total_spent 
                 ON users(total_spent DESC);
@@ -305,9 +299,19 @@ class OrderManager:
                 ON users(last_purchase DESC);
             ''')
             
-            logger.info("✅ جدول users جاهز بالكامل")
+            await self.pool.execute('''
+                CREATE INDEX IF NOT EXISTS idx_orders_user 
+                ON orders(user_id, created_at DESC);
+            ''')
+            
+            await self.pool.execute('''
+                CREATE INDEX IF NOT EXISTS idx_orders_status 
+                ON orders(status) WHERE status != 'completed';
+            ''')
+            
+            logger.info("✅ جميع الجداول جاهزة")
         except Exception as e:
-            logger.error(f"❌ فشل إنشاء الجدول: {e}", exc_info=True)
+            logger.error(f"❌ فشل إنشاء الجداول: {e}", exc_info=True)
             raise
 
     async def execute_with_retry(self, query: str, *args, fetch: bool = False):
@@ -368,63 +372,318 @@ class OrderManager:
             logger.error(f"❌ خطأ get_user_data: {e}")
             return None
 
-    async def add_order(self, user_id: int, amount: int, category: str) -> Optional[tuple]:
+    async def _check_duplicate_order(
+        self, 
+        user_id: int, 
+        idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        """التحقق من الطلبات المكررة"""
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT new_total, old_total, new_rank, id as order_id
+                    FROM orders 
+                    WHERE user_id = $1 
+                      AND metadata->>'idempotency_key' = $2
+                      AND created_at > NOW() - INTERVAL '1 hour'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    user_id, idempotency_key
+                )
+                
+                if row:
+                    return {
+                        'new_total': row['new_total'],
+                        'old_total': row['old_total'],
+                        'new_rank': row['new_rank'],
+                        'order_id': row['order_id'],
+                        'duplicate': True,
+                        'rank_changed': False
+                    }
+        except Exception as e:
+            logger.error(f"❌ خطأ فحص التكرار: {e}")
+        
+        return None
+
+    async def _execute_order_transaction(
+        self,
+        user_id: int,
+        amount: int,
+        category: str,
+        payment_charge_id: str,
+        telegram_payment_charge_id: str,
+        idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        """تنفيذ المعاملة الكاملة مع Audit Trail"""
+        
+        async with self.pool.acquire() as conn:
+            async with conn.transaction(isolation='serializable'):
+                
+                user_row = await conn.fetchrow(
+                    """
+                    SELECT 
+                        id, 
+                        total_spent, 
+                        order_count,
+                        rank,
+                        is_blocked 
+                    FROM users 
+                    WHERE id = $1 
+                    FOR UPDATE
+                    """,
+                    user_id
+                )
+                
+                if not user_row:
+                    logger.error(f"❌ [{user_id}] مستخدم غير موجود")
+                    return None
+                
+                if user_row['is_blocked']:
+                    logger.warning(f"🚫 [{user_id}] محاولة شراء من مستخدم محظور")
+                    return None
+                
+                old_total = user_row['total_spent']
+                old_rank = user_row['rank']
+                old_count = user_row['order_count']
+                
+                new_total = old_total + amount
+                new_count = old_count + 1
+                
+                MAX_TOTAL = 9_000_000_000_000
+                if new_total > MAX_TOTAL:
+                    logger.error(
+                        f"❌ [{user_id}] تجاوز الحد الأقصى: "
+                        f"{new_total:,} > {MAX_TOTAL:,}"
+                    )
+                    return None
+                
+                new_rank = get_rank(new_total)
+                rank_changed = (old_rank != new_rank)
+                
+                await conn.execute(
+                    """
+                    UPDATE users 
+                    SET 
+                        total_spent = $2,
+                        order_count = $3,
+                        rank = $4,
+                        last_purchase = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                    """,
+                    user_id, new_total, new_count, new_rank
+                )
+                
+                metadata = {
+                    'idempotency_key': idempotency_key,
+                    'rank_changed': rank_changed,
+                    'user_agent': 'telegram_bot',
+                    'version': '2.0'
+                }
+                
+                order_id = await conn.fetchval(
+                    """
+                    INSERT INTO orders (
+                        user_id,
+                        category,
+                        amount,
+                        old_total,
+                        new_total,
+                        old_rank,
+                        new_rank,
+                        payment_charge_id,
+                        telegram_payment_charge_id,
+                        metadata
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    RETURNING id
+                    """,
+                    user_id, category, amount,
+                    old_total, new_total,
+                    old_rank, new_rank,
+                    payment_charge_id,
+                    telegram_payment_charge_id,
+                    json.dumps(metadata)
+                )
+                
+                logger.info(
+                    f"💰 ORDER #{order_id} | "
+                    f"User {user_id} | "
+                    f"{category} | "
+                    f"{amount:,} ⭐ | "
+                    f"{old_total:,} → {new_total:,} | "
+                    f"{'🎊 ' + new_rank if rank_changed else new_rank}"
+                )
+                
+                return {
+                    'order_id': order_id,
+                    'new_total': new_total,
+                    'old_total': old_total,
+                    'new_rank': new_rank,
+                    'old_rank': old_rank,
+                    'rank_changed': rank_changed,
+                    'duplicate': False
+                }
+
+    async def add_order(
+        self, 
+        user_id: int, 
+        amount: int, 
+        category: str,
+        payment_charge_id: str = None,
+        telegram_payment_charge_id: str = None,
+        idempotency_key: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        🛡️ دالة محسّنة مع:
+        - Idempotency Protection
+        - Audit Trail
+        - Retry Mechanism
+        - Detailed Logging
+        - Rollback Support
+        """
+        
         uid = validator.validate_user_id(user_id)
         amt = validator.validate_amount(amount)
         cat = validator.validate_category(category)
         
         if not all([uid, amt, cat]):
+            logger.error(f"❌ مدخلات غير صالحة: uid={uid}, amt={amt}, cat={cat}")
             return None
         
+        # Idempotency Check
+        if idempotency_key:
+            existing = await self._check_duplicate_order(uid, idempotency_key)
+            if existing:
+                logger.warning(f"⚠️ [{uid}] طلب مكرر: {idempotency_key}")
+                return existing
+        
+        # Retry Mechanism
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                result = await self._execute_order_transaction(
+                    uid, amt, cat, 
+                    payment_charge_id, 
+                    telegram_payment_charge_id,
+                    idempotency_key
+                )
+                
+                if result:
+                    logger.info(
+                        f"✅ [{uid}] طلب ناجح (محاولة {attempt + 1}): "
+                        f"{cat} - {amt:,} ⭐"
+                    )
+                    return result
+                
+            except asyncpg.exceptions.SerializationError as e:
+                logger.warning(
+                    f"⚠️ [{uid}] تضارب معاملة (محاولة {attempt + 1}): {e}"
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (attempt + 1))
+                else:
+                    logger.error(f"❌ [{uid}] فشل بعد {max_retries} محاولات")
+                    return None
+                    
+            except asyncpg.exceptions.PostgresError as e:
+                logger.error(f"❌ [{uid}] خطأ PostgreSQL: {e}", exc_info=True)
+                
+                if "connection" in str(e).lower():
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay * 2)
+                        continue
+                return None
+                
+            except Exception as e:
+                logger.error(f"❌ [{uid}] خطأ غير متوقع: {e}", exc_info=True)
+                return None
+        
+        return None
+
+    async def get_user_orders(self, user_id: int, limit: int = 10):
+        """استرجاع تاريخ الطلبات"""
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT 
+                        id,
+                        category,
+                        amount,
+                        new_rank,
+                        created_at
+                    FROM orders
+                    WHERE user_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT $2
+                    """,
+                    user_id, limit
+                )
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"❌ خطأ get_user_orders: {e}")
+            return []
+
+    async def rollback_order(self, order_id: int, reason: str = "refund"):
+        """
+        🔄 Rollback طلب (للاسترداد أو التصحيح)
+        """
         try:
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
-                    row = await conn.fetchrow(
+                    order = await conn.fetchrow(
                         """
-                        SELECT total_spent, is_blocked 
-                        FROM users 
-                        WHERE id = $1 
+                        SELECT user_id, amount, old_total, old_rank
+                        FROM orders
+                        WHERE id = $1 AND status = 'completed'
                         FOR UPDATE
                         """,
-                        uid
+                        order_id
                     )
                     
-                    if not row:
-                        logger.error(f"❌ مستخدم غير موجود: {uid}")
-                        return None
-                    
-                    if row['is_blocked']:
-                        logger.warning(f"🚫 محاولة شراء من مستخدم محظور: {uid}")
-                        return None
-                    
-                    old_total = row['total_spent']
-                    new_total = old_total + amt
-                    
-                    # 🛡️ حماية 13: Integer Overflow
-                    if new_total > 9_000_000_000_000:
-                        logger.error(f"❌ [{uid}] تجاوز الحد الأقصى: {new_total}")
-                        return None
-                    
-                    new_rank = get_rank(new_total)
+                    if not order:
+                        logger.error(f"❌ طلب غير موجود: {order_id}")
+                        return False
                     
                     await conn.execute(
                         """
-                        UPDATE users 
-                        SET total_spent = $2,
-                            order_count = order_count + 1,
-                            rank = $3,
-                            last_purchase = CURRENT_TIMESTAMP
+                        UPDATE users
+                        SET 
+                            total_spent = $2,
+                            order_count = order_count - 1,
+                            rank = $3
                         WHERE id = $1
                         """,
-                        uid, new_total, new_rank
+                        order['user_id'],
+                        order['old_total'],
+                        order['old_rank']
                     )
                     
-                    logger.info(f"✅ طلب: {uid} - {cat} - {amt:,} ⭐")
-                    return new_total, old_total
+                    await conn.execute(
+                        """
+                        UPDATE orders
+                        SET 
+                            status = $2,
+                            metadata = metadata || $3::jsonb
+                        WHERE id = $1
+                        """,
+                        order_id,
+                        'refunded',
+                        json.dumps({
+                            'refund_reason': reason, 
+                            'refunded_at': datetime.now().isoformat()
+                        })
+                    )
+                    
+                    logger.info(f"🔄 Rollback #{order_id}: {reason}")
+                    return True
                     
         except Exception as e:
-            logger.error(f"❌ خطأ add_order: {e}", exc_info=True)
-            return None
+            logger.error(f"❌ خطأ rollback: {e}", exc_info=True)
+            return False
 
 order_manager = OrderManager()
 
@@ -460,7 +719,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         count = data['orderCount']
         rank = data['rank']
         
-        # 🛡️ حماية 16: تنظيف اسم المستخدم
         safe_name = validator.sanitize_string(user.first_name, 50)
         
         keyboard = [[InlineKeyboardButton(
@@ -485,7 +743,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ حدث خطأ، حاول لاحقاً")
 
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """🛡️ معالج WebApp محمي (حماية 11, 14)"""
+    """🛡️ معالج WebApp محمي"""
     try:
         user = update.effective_user
         user_id = user.id
@@ -503,7 +761,6 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         raw_data = update.effective_message.web_app_data.data
         
-        # 🛡️ حماية 11: JSON Injection
         if len(raw_data) > 5000:
             logger.error(f"❌ [{user_id}] JSON كبير جداً: {len(raw_data)} bytes")
             await update.effective_message.reply_text("❌ بيانات كبيرة جداً")
@@ -556,7 +813,6 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         product = PRODUCTS[category]
         payload = f"order_{user_id}_{category}_{amount}_{int(datetime.now().timestamp())}"
         
-        # 🛡️ حماية 14: Lock للمستخدم
         async with order_lock.get_lock(user_id):
             await update.effective_message.reply_invoice(
                 title=f"{product['emoji']} {product['name']}",
@@ -579,7 +835,7 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
             pass
 
 async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """🛡️ فحص ما قبل الدفع (حماية 12)"""
+    """🛡️ فحص ما قبل الدفع"""
     query = update.pre_checkout_query
     user_id = query.from_user.id
     
@@ -604,7 +860,6 @@ async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer(ok=False, error_message="بيانات غير صحيحة")
             return
         
-        # 🛡️ حماية 12: Timestamp Manipulation
         timestamp = validator.validate_amount(parts[4])
         if timestamp:
             try:
@@ -624,12 +879,11 @@ async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer(ok=False, error_message="حدث خطأ")
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """🛡️ معالج الدفع الناجح (حماية 20)"""
+    """🛡️ معالج الدفع الناجح المحسّن"""
     user = update.effective_user
     payment = update.effective_message.successful_payment
     
     try:
-        # 🛡️ حماية 20: فحص المبلغ والـ tip
         if payment.total_amount > 1_000_000:
             logger.warning(f"⚠️ [{user.id}] مبلغ ضخم: {payment.total_amount:,}")
         
@@ -647,7 +901,15 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         product = PRODUCTS.get(category, {"name": "لاشيء", "emoji": "✨"})
         
-        result = await order_manager.add_order(user.id, payment.total_amount, category)
+        # 🆕 استخدام الدالة المحسّنة مع Idempotency
+        result = await order_manager.add_order(
+            user_id=user.id,
+            amount=payment.total_amount,
+            category=category,
+            payment_charge_id=getattr(payment, 'provider_payment_charge_id', None),
+            telegram_payment_charge_id=getattr(payment, 'telegram_payment_charge_id', None),
+            idempotency_key=payment.invoice_payload  # الحماية من التكرار
+        )
         
         if not result:
             logger.error(f"❌ [{user.id}] فشل حفظ الطلب")
@@ -667,12 +929,28 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     pass
             return
         
-        new_total, old_total = result
-        old_rank = get_rank(old_total)
-        new_rank = get_rank(new_total)
+        # 🆕 التعامل مع الطلبات المكررة
+        if result.get('duplicate'):
+            await update.effective_message.reply_text(
+                f"⚠️ تم معالجة هذا الطلب مسبقاً\n\n"
+                f"📦 {product['emoji']} {product['name']}\n"
+                f"💰 {payment.total_amount:,} ⭐\n"
+                f"🏷️ {result['new_rank']}\n"
+                f"💎 الإجمالي: {result['new_total']:,} ⭐\n\n"
+                f"إذا كانت هناك مشكلة، تواصل مع الدعم."
+            )
+            logger.warning(f"⚠️ [{user.id}] طلب مكرر تم اكتشافه")
+            return
+        
+        new_total = result['new_total']
+        old_total = result['old_total']
+        new_rank = result['new_rank']
+        old_rank = result['old_rank']
+        rank_changed = result['rank_changed']
+        order_id = result['order_id']
         
         rank_up = ""
-        if old_rank != new_rank:
+        if rank_changed:
             rank_up = f"\n\n🎊 ترقية!\n{old_rank} ➜ {new_rank}"
         
         await update.effective_message.reply_text(
@@ -680,11 +958,12 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"📦 {product['emoji']} {product['name']}\n"
             f"💰 {payment.total_amount:,} ⭐\n"
             f"🏷️ {new_rank}\n"
-            f"💎 الإجمالي: {new_total:,} ⭐{rank_up}\n\n"
+            f"💎 الإجمالي: {new_total:,} ⭐{rank_up}\n"
+            f"🆔 رقم الطلب: #{order_id}\n\n"
             f"شكراً لك ❤️"
         )
         
-        logger.info(f"💳 [{user.id}] دفع ناجح: {payment.total_amount:,} ⭐")
+        logger.info(f"💳 [{user.id}] دفع ناجح: {payment.total_amount:,} ⭐ | Order #{order_id}")
         
         if ADMIN_ID:
             try:
@@ -698,7 +977,8 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     f"📦 {product['name']}\n"
                     f"💰 {payment.total_amount:,} ⭐\n"
                     f"🏷️ {new_rank}\n"
-                    f"💎 إجمالي: {new_total:,} ⭐"
+                    f"💎 إجمالي: {new_total:,} ⭐\n"
+                    f"🔢 Order #{order_id}"
                 )
             except Exception as e:
                 logger.error(f"❌ فشل إرسال للأدمن: {e}")
@@ -727,13 +1007,102 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
+# ============= أوامر إضافية للأدمن =============
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إحصائيات للأدمن فقط"""
+    user_id = update.effective_user.id
+    
+    if not ADMIN_ID or user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ هذا الأمر للأدمن فقط")
+        return
+    
+    try:
+        async with order_manager.pool.acquire() as conn:
+            stats = await conn.fetchrow("""
+                SELECT 
+                    COUNT(DISTINCT id) as total_users,
+                    SUM(total_spent) as total_revenue,
+                    SUM(order_count) as total_orders
+                FROM users
+            """)
+            
+            recent_orders = await conn.fetch("""
+                SELECT COUNT(*) as count, SUM(amount) as revenue
+                FROM orders
+                WHERE created_at > NOW() - INTERVAL '24 hours'
+            """)
+            
+            top_users = await conn.fetch("""
+                SELECT id, total_spent, rank
+                FROM users
+                ORDER BY total_spent DESC
+                LIMIT 5
+            """)
+        
+        msg = "📊 إحصائيات البوت\n\n"
+        msg += f"👥 إجمالي المستخدمين: {stats['total_users']:,}\n"
+        msg += f"💰 إجمالي الإيرادات: {stats['total_revenue']:,} ⭐\n"
+        msg += f"📦 إجمالي الطلبات: {stats['total_orders']:,}\n\n"
+        
+        if recent_orders and recent_orders[0]['count']:
+            msg += f"📅 آخر 24 ساعة:\n"
+            msg += f"   طلبات: {recent_orders[0]['count']:,}\n"
+            msg += f"   إيرادات: {recent_orders[0]['revenue']:,} ⭐\n\n"
+        
+        msg += "🏆 أفضل 5 مستخدمين:\n"
+        for i, user in enumerate(top_users, 1):
+            msg += f"{i}. User {user['id']}: {user['total_spent']:,} ⭐ ({user['rank']})\n"
+        
+        await update.message.reply_text(msg)
+        
+    except Exception as e:
+        logger.error(f"❌ خطأ admin_stats: {e}")
+        await update.message.reply_text("❌ حدث خطأ")
+
+async def admin_refund(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """استرداد طلب - للأدمن فقط"""
+    user_id = update.effective_user.id
+    
+    if not ADMIN_ID or user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ هذا الأمر للأدمن فقط")
+        return
+    
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text(
+            "❌ الاستخدام الصحيح:\n"
+            "/refund <order_id> [سبب]"
+        )
+        return
+    
+    order_id = int(context.args[0])
+    reason = " ".join(context.args[1:]) if len(context.args) > 1 else "admin_refund"
+    
+    try:
+        success = await order_manager.rollback_order(order_id, reason)
+        
+        if success:
+            await update.message.reply_text(
+                f"✅ تم استرداد الطلب #{order_id}\n"
+                f"السبب: {reason}"
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ فشل استرداد الطلب #{order_id}\n"
+                f"ربما الطلب غير موجود أو تم استرداده مسبقاً"
+            )
+    except Exception as e:
+        logger.error(f"❌ خطأ admin_refund: {e}")
+        await update.message.reply_text("❌ حدث خطأ")
+
 # ============= التهيئة =============
 async def post_init(application):
     await order_manager.connect()
     bot = await application.bot.get_me()
     logger.info(f"✅ البوت: @{bot.username}")
     logger.info(f"🌐 WebApp: {WEB_APP_URL}")
-    logger.info(f"🛡️ نظام الحماية: 20 طبقة مفعلة")
+    logger.info(f"🛡️ نظام الحماية: 20+ طبقة مفعلة")
+    logger.info(f"🆕 Idempotency: مفعل")
+    logger.info(f"📊 Audit Trail: مفعل")
 
 async def pre_shutdown(application):
     if order_manager.pool:
@@ -741,7 +1110,6 @@ async def pre_shutdown(application):
         logger.info("✅ إغلاق PostgreSQL")
 
 # ============= التشغيل =============
-
 def main():
     if not BOT_TOKEN or len(BOT_TOKEN) < 40:
         logger.error("❌ BOT_TOKEN خاطئ")
@@ -750,7 +1118,7 @@ def main():
     if WEBHOOK_URL and (not WEBHOOK_SECRET or len(WEBHOOK_SECRET) < 10):
         logger.warning("⚠️ WEBHOOK_SECRET ضعيف أو مفقود!")
     
-    logger.info("🚀 تشغيل البوت المحمي...")
+    logger.info("🚀 تشغيل البوت المحمي والمحسّن...")
     
     app = (Application.builder()
            .token(BOT_TOKEN)
@@ -761,6 +1129,8 @@ def main():
     
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("stats", admin_stats))
+    app.add_handler(CommandHandler("refund", admin_refund))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
@@ -782,7 +1152,7 @@ def main():
     loop.run_until_complete(cleanup_webhook())
 
     if WEBHOOK_URL:
-        logger.info("🌐 Webhook Mode (Protected)")
+        logger.info("🌐 Webhook Mode (Protected & Enhanced)")
         logger.info(f"📍 {WEBHOOK_URL}")
         
         app.run_webhook(
@@ -795,7 +1165,7 @@ def main():
             secret_token=WEBHOOK_SECRET if WEBHOOK_SECRET and len(WEBHOOK_SECRET) >= 10 else None
         )
     else:
-        logger.info("📡 Polling Mode (Protected)")
+        logger.info("📡 Polling Mode (Protected & Enhanced)")
         
         def signal_handler(sig, frame):
             logger.info("🛑 إيقاف...")
