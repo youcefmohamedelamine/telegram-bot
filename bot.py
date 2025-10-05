@@ -1,128 +1,87 @@
-import telebot
-from telebot import types
-# تأكد من أن ملف config.py يحتوي على TOKEN و STAR_PROVIDER_TOKEN
-from config import TOKEN, STAR_PROVIDER_TOKEN 
-# استيراد الوظائف الجديدة (PostgreSQL)
-from database import setup_db, save_payment 
-import os
-import asyncio # نحتاج إلى asyncio لتشغيل دالة setup_db
+import logging
+from telegram import Update, LabeledPrice
+from telegram.ext import Application, CommandHandler, PreCheckoutQueryHandler, MessageHandler, filters, ContextTypes
 
-# ----------------------------------
-# 1. إعداد البوت
-# ----------------------------------
-bot = telebot.TeleBot(TOKEN)
+# إعداد السجلات
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# تهيئة قاعدة البيانات لمرة واحدة قبل بدء البوت
-# نستخدم asyncio.run لتشغيل دالة async مرة واحدة.
-print("⏳ جاري تهيئة قاعدة بيانات PostgreSQL...")
-try:
-    asyncio.run(setup_db())
-    print("✅ تم ربط قاعدة البيانات بنجاح.")
-except Exception as e:
-    print(f"❌ فشل ربط قاعدة البيانات: {e}")
-    # إذا فشل الاتصال بالقاعدة، يجب أن يتوقف البوت
-    # exit()
+# ضع توكن البوت الخاص بك هنا
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
-# ----------------------------------
-# 2. الدوال المساعدة
-# ----------------------------------
-
-# وظيفة لإنشاء زر الدفع (Pay Button)
-def payment_keyboard():
-    keyboard = types.InlineKeyboardMarkup()
-    # يجب أن يكون الزر pay=True في الفاتورة نفسها وليس هنا (هنا لإرسال الفاتورة)
-    # هذا الزر يتم استخدامه فقط إذا كنت لا تستخدم WebApp.
-    # بما أننا نستخدم send_invoice، نكتفي بالزر الذي يُنشئه Telegram تلقائيًا.
-    return keyboard 
-
-# وظيفة لإنشاء زر "شراء صورة"
-def start_keyboard():
-    keyboard = types.InlineKeyboardMarkup()
-    button = types.InlineKeyboardButton(text="🛒 شراء صورة (1 ⭐)", callback_data="buy_image")
-    keyboard.add(button)
-    return keyboard
-
-# ----------------------------------
-# 3. معالجات الرسائل
-# ----------------------------------
-
-# معالج أمر /start
-@bot.message_handler(commands=['start'])
-def handle_start(message):
-    bot.send_message(
-        message.chat.id,
-        "أهلاً بك! اضغط الزر أدناه لشراء الصورة بنجمة تيليجرام واحدة (XTR).",
-        reply_markup=start_keyboard()
+# دالة البداية
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "مرحباً! أنا بوت للدفع بنجوم تيليجرام ⭐\n\n"
+        "استخدم /buy لشراء منتج"
     )
 
-# معالج الضغط على زر "شراء صورة"
-@bot.callback_query_handler(func=lambda call: call.data == "buy_image")
-def handle_buy_image(call):
-    # التأكد من وجود رمز الموفر
-    if not STAR_PROVIDER_TOKEN:
-        bot.send_message(call.message.chat.id, "❌ رمز موفر الدفع غير مُعدّ. تواصل مع المطور.")
-        return
-        
-    prices = [types.LabeledPrice(label="نجمة تيليجرام واحدة", amount=1000)] # 1 XTR = 1000 وحدة
+# دالة الشراء
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat_id
     
-    bot.send_invoice(
-        call.message.chat.id,
-        title="شراء الصورة",
-        description="صورة مميزة مقابل نجمة تيليجرام واحدة (XTR)!",
-        invoice_payload=f"image_purchase_{call.from_user.id}",
-        # استخدم رمز الموفر المُخزّن في config
-        provider_token=STAR_PROVIDER_TOKEN, 
-        currency="XTR", # العملة هي نجوم تيليجرام
-        prices=prices,
-        # لا نضع reply_markup هنا، نترك تيليجرام يُنشئ زر الدفع التلقائي
-        # reply_markup=payment_keyboard() 
+    # إنشاء الفاتورة
+    title = "منتج تجريبي"
+    description = "هذا منتج تجريبي يمكنك شراؤه بنجوم تيليجرام"
+    payload = "custom-payload"
+    currency = "XTR"  # XTR هي عملة نجوم تيليجرام
+    
+    # السعر (عدد النجوم)
+    prices = [LabeledPrice("المنتج", 100)]  # 100 نجمة
+    
+    # إرسال الفاتورة
+    await context.bot.send_invoice(
+        chat_id=chat_id,
+        title=title,
+        description=description,
+        payload=payload,
+        provider_token="",  # فارغ لنجوم تيليجرام
+        currency=currency,
+        prices=prices
     )
 
-# معالج التحقق المسبق من الدفع
-@bot.pre_checkout_query_handler(func=lambda query: True)
-def handle_pre_checkout_query(pre_checkout_query):
-    # لا تحتاج إلى تحققات إضافية لنجوم تيليجرام عادةً
-    bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-
-# معالج الدفع الناجح
-@bot.message_handler(content_types=['successful_payment'])
-def handle_successful_payment(message):
-    user_id = message.from_user.id
-    # استخدم transaction_id كمعرف دفع فريد
-    payment_id = message.successful_payment.telegram_payment_charge_id
-    amount = message.successful_payment.total_amount
-    currency = message.successful_payment.currency
-
-    # 1. إرسال رسالة التأكيد
-    bot.send_message(message.chat.id, "✅ تم قبول الدفع، يرجى الانتظار لتلقي الصورة! 🥳")
+# معالجة استعلامات ما قبل الدفع
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
     
-    # 2. حفظ معلومات الدفع في قاعدة البيانات (غير متزامن - سنستخدم asyncio.run مؤقتًا)
-    try:
-        # بما أن save_payment أصبحت async، يجب تشغيلها بهذه الطريقة في كود متزامن
-        asyncio.run(save_payment(user_id, payment_id, amount, currency))
-    except Exception as e:
-        print(f"❌ خطأ في حفظ الدفع في قاعدة البيانات: {e}")
-
-    # 3. إرسال الصورة
-    photo_path = 'img/img-X9ptcIuiOMICY0BUQukCpVYS.png'
-    if os.path.exists(photo_path):
-        with open(photo_path, 'rb') as photo:
-            bot.send_photo(message.chat.id, photo, caption="🥳شكراً لك على الشراء!🤗")
+    # التحقق من البيانات
+    if query.invoice_payload != "custom-payload":
+        await query.answer(ok=False, error_message="حدث خطأ في معالجة الدفع")
     else:
-        bot.send_message(message.chat.id, "عذراً، الصورة غير موجودة على الخادم.")
+        await query.answer(ok=True)
 
-# معالج أمر /paysupport
-@bot.message_handler(commands=['paysupport'])
-def handle_pay_support(message):
-    bot.send_message(
-        message.chat.id,
-        "شراء الصور لا يتضمن استرداداً للمبالغ المدفوعة. "
-        "إذا كانت لديك أية استفسارات، يرجى التواصل مع الدعم الفني."
+# معالجة الدفع الناجح
+async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    payment = update.message.successful_payment
+    
+    logger.info(f"تم الدفع بنجاح! المستخدم: {update.message.from_user.id}")
+    logger.info(f"المبلغ: {payment.total_amount} {payment.currency}")
+    logger.info(f"Telegram Payment Charge ID: {payment.telegram_payment_charge_id}")
+    
+    await update.message.reply_text(
+        "✅ تم الدفع بنجاح!\n"
+        f"شكراً لشرائك المنتج ⭐\n"
+        f"المبلغ المدفوع: {payment.total_amount} نجمة"
     )
 
-# ----------------------------------
-# 4. تشغيل البوت (Polling)
-# ----------------------------------
-# إذا كنت تستخدم Railway، يجب عليك استخدام الـ Webhook بدلاً من Polling.
-# لكن إذا كنت مصرًا على Polling، يمكن أن يعمل لفترة وجيزة.
-#bot.polling()
+# دالة معالجة الأخطاء
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"حدث خطأ: {context.error}")
+
+def main():
+    # إنشاء التطبيق
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # إضافة المعالجات
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("buy", buy))
+    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
+    application.add_error_handler(error_handler)
+    
+    # تشغيل البوت
+    logger.info("البوت يعمل الآن...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == '__main__':
+    main()
