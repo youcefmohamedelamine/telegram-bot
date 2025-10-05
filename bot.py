@@ -303,6 +303,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(support_text, parse_mode='HTML')
 
 # معالجة بيانات WebApp
+# معالجة بيانات WebApp
 @error_handler
 async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -310,12 +311,21 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         product_id = data.get('product')
         price = data.get('price')
         
+        logger.info(f"استلام بيانات WebApp: {data}")
+        
         if not product_id or product_id not in PRODUCTS:
             await update.message.reply_text("❌ منتج غير صالح")
             return
         
         product = PRODUCTS[product_id]
         
+        # إرسال رسالة تأكيد أولاً
+        confirmation = await update.message.reply_text(
+            f"⏳ جاري تجهيز الفاتورة لـ {product['title']}...",
+            parse_mode='HTML'
+        )
+        
+        # إرسال الفاتورة
         await context.bot.send_invoice(
             chat_id=update.message.chat_id,
             title=product['title'],
@@ -325,15 +335,21 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             currency="XTR",
             prices=[LabeledPrice("المنتج", price)]
         )
-        logger.info(f"فاتورة أُنشئت للمستخدم {update.effective_user.id} - المنتج: {product_id}")
+        
+        # حذف رسالة التأكيد
+        await confirmation.delete()
+        
+        logger.info(f"✅ فاتورة أُرسلت للمستخدم {update.effective_user.id} - المنتج: {product_id}")
     
-    except json.JSONDecodeError:
-        logger.error("فشل في تحليل بيانات WebApp")
+    except json.JSONDecodeError as e:
+        logger.error(f"فشل في تحليل بيانات WebApp: {e}")
         await update.message.reply_text("❌ بيانات غير صالحة")
+    except BadRequest as e:
+        logger.error(f"خطأ في إنشاء الفاتورة: {e}")
+        await update.message.reply_text(f"❌ فشل إنشاء الفاتورة: {str(e)}")
     except Exception as e:
-        logger.error(f"خطأ في معالجة WebApp: {e}")
+        logger.error(f"خطأ غير متوقع في WebApp: {e}", exc_info=True)
         await update.message.reply_text("❌ حدث خطأ في معالجة طلبك")
-
 # معالجة ما قبل الدفع
 @error_handler
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
