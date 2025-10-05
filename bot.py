@@ -1,405 +1,161 @@
-# ============= Python Backend (Bot + API) مع Webhook =============
+import logging
 import json
 import os
-from datetime import datetime
-from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters, ContextTypes, CallbackQueryHandler
-from flask import Flask, jsonify, request as flask_request
-from flask_cors import CORS
+import sys
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, PreCheckoutQueryHandler
 
-# ============= إعدادات =============
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")  # مثال: https://yourapp.railway.app
-PORT = int(os.environ.get("PORT", 5000))
-PROVIDER_TOKEN = ""
+# ================== الإعدادات الضرورية ==================
+# تأكد من تعيين هذه المتغيرات في Railway
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+STAR_PROVIDER_TOKEN = os.getenv("STAR_PROVIDER_TOKEN", "").strip() # رمز موفر نجوم تيليجرام
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://your-github-username.github.io/your-repo-name/").strip()
+PORT = int(os.getenv("PORT", 8080))
 
-# ============= Flask API =============
-app = Flask(__name__)
-CORS(app)
+# يمكنك تغيير هذه القائمة حسب منتجاتك
+PRODUCTS = {
+    "small": {"name": "لاشيء صغير", "amount": 5000},
+    "medium": {"name": "لاشيء متوسط", "amount": 10000},
+    "large": {"name": "لاشيء كبير", "amount": 20000}
+}
+# =======================================================
 
-class FreefireBot:
-    def __init__(self):
-        self.orders = self.load_orders()
-        self.packages = {
-            "100": {"stars": 10, "name": "100 نجمة فري فاير"},
-            "310": {"stars": 30, "name": "310 نجمة فري فاير"},
-            "520": {"stars": 50, "name": "520 نجمة فري فاير"},
-            "1060": {"stars": 100, "name": "1060 نجمة فري فاير"},
-            "2180": {"stars": 200, "name": "2180 نجمة فري فاير"}
-        }
-    
-    def load_orders(self):
-        try:
-            if os.path.exists("orders.json"):
-                with open("orders.json", "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except:
-            pass
-        return {}
-    
-    def save_orders(self):
-        with open("orders.json", "w", encoding="utf-8") as f:
-            json.dump(self.orders, f, indent=4, ensure_ascii=False)
-    
-    def create_order(self, user_id, package_id, stars_paid):
-        self.orders[str(user_id)] = {
-            "package": package_id,
-            "freefire_id": "لم يُرسل",
-            "stars_paid": stars_paid,
-            "status": "waiting_id",
-            "time": datetime.now().isoformat()
-        }
-        self.save_orders()
-        return True
-    
-    def update_freefire_id(self, user_id, freefire_id):
-        if str(user_id) in self.orders:
-            self.orders[str(user_id)]["freefire_id"] = freefire_id
-            self.orders[str(user_id)]["status"] = "processing"
-            self.save_orders()
-            return True
-        return False
-    
-    def complete_order(self, user_id):
-        if str(user_id) in self.orders:
-            self.orders[str(user_id)]["status"] = "completed"
-            self.save_orders()
-            return True
-        return False
-    
-    def get_order(self, user_id):
-        return self.orders.get(str(user_id))
-    
-    def get_all_orders(self):
-        return self.orders
-    
-    def get_statistics(self):
-        total_orders = len(self.orders)
-        completed_orders = sum(1 for o in self.orders.values() if o.get("status") == "completed")
-        waiting_orders = sum(1 for o in self.orders.values() if o.get("status") == "waiting_id")
-        processing_orders = sum(1 for o in self.orders.values() if o.get("status") == "processing")
-        total_revenue = sum(o.get("stars_paid", 0) for o in self.orders.values())
-        
-        return {
-            "total": total_orders,
-            "completed": completed_orders,
-            "waiting": waiting_orders,
-            "processing": processing_orders,
-            "revenue": total_revenue
-        }
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-bot_instance = FreefireBot()
-
-# ============= API Endpoints =============
-
-@app.route('/')
-def home():
-    return jsonify({
-        "status": "running",
-        "bot": "Free Fire Bot",
-        "api": "active"
-    })
-
-@app.route('/api/orders', methods=['GET'])
-def get_orders():
-    return jsonify(bot_instance.get_all_orders())
-
-@app.route('/api/statistics', methods=['GET'])
-def get_statistics():
-    return jsonify(bot_instance.get_statistics())
-
-@app.route('/api/order/<user_id>', methods=['GET'])
-def get_order(user_id):
-    order = bot_instance.get_order(user_id)
-    if order:
-        return jsonify(order)
-    return jsonify({"error": "Order not found"}), 404
-
-@app.route('/api/order/<user_id>/complete', methods=['POST'])
-def complete_order(user_id):
-    if bot_instance.complete_order(user_id):
-        return jsonify({"success": True, "message": "Order completed"})
-    return jsonify({"error": "Order not found"}), 404
-
-@app.route('/api/order/<user_id>/delete', methods=['DELETE'])
-def delete_order(user_id):
-    if str(user_id) in bot_instance.orders:
-        del bot_instance.orders[str(user_id)]
-        bot_instance.save_orders()
-        return jsonify({"success": True, "message": "Order deleted"})
-    return jsonify({"error": "Order not found"}), 404
-
-# ============= Telegram Bot Handlers =============
+# ================== معالجات الأوامر ==================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🛒 شراء نجوم فري فاير", callback_data="buy")],
-        [InlineKeyboardButton("📦 طلباتي", callback_data="my_orders")],
-        [InlineKeyboardButton("ℹ️ المساعدة", callback_data="help")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    """يرسل رسالة الترحيب وزر فتح الـ Web App."""
+    user = update.message.from_user
     
-    welcome_text = """
-🎮 *مرحباً بك في بوت فري فاير!*
-
-✨ يمكنك شراء نجوم فري فاير بسهولة باستخدام نجوم تليجرام
-
-🌟 *المميزات:*
-• دفع آمن عبر نجوم تليجرام
-• توصيل فوري خلال دقائق
-• دعم فني 24/7
-
-اختر ما تريد من القائمة أدناه 👇
-    """
-    
-    await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
-
-async def show_packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = []
-    for package_id, package_info in bot_instance.packages.items():
-        keyboard.append([
-            InlineKeyboardButton(
-                f"💎 {package_info['name']} - ⭐ {package_info['stars']} نجمة",
-                callback_data=f"package_{package_id}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")])
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(
-        "🛍️ *اختر الباقة المناسبة لك:*\n\n💫 الدفع عبر نجوم تليجرام",
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
-
-async def process_package_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    package_id = query.data.split("_")[1]
-    package = bot_instance.packages.get(package_id)
-    
-    if not package:
-        await query.edit_message_text("❌ حدث خطأ، يرجى المحاولة مرة أخرى")
-        return
-    
-    title = f"💎 {package['name']}"
-    description = f"شراء {package['name']} عبر نجوم تليجرام"
-    payload = f"freefire_{package_id}_{query.from_user.id}"
-    
-    prices = [LabeledPrice(label=package['name'], amount=package['stars'])]
-    
-    await context.bot.send_invoice(
-        chat_id=query.from_user.id,
-        title=title,
-        description=description,
-        payload=payload,
-        provider_token=PROVIDER_TOKEN,
-        currency="XTR",
-        prices=prices,
-        start_parameter="freefire-payment"
-    )
-    
-    await query.edit_message_text(
-        f"✅ تم إنشاء فاتورة الدفع!\n\n"
-        f"💎 الباقة: {package['name']}\n"
-        f"⭐ السعر: {package['stars']} نجمة\n\n"
-        f"اضغط على زر الدفع لإكمال العملية 👇"
-    )
-
-async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.pre_checkout_query
-    await query.answer(ok=True)
-
-async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    payment = update.message.successful_payment
-    user_id = update.message.from_user.id
-    
-    payload_parts = payment.invoice_payload.split("_")
-    package_id = payload_parts[1]
-    
-    bot_instance.create_order(
-        user_id=user_id,
-        package_id=package_id,
-        stars_paid=payment.total_amount
-    )
+    keyboard = [[InlineKeyboardButton(
+        "🛍️ افتح المتجر", 
+        web_app=WebAppInfo(url=WEB_APP_URL)
+    )]]
     
     await update.message.reply_text(
-        "✅ *تم الدفع بنجاح!*\n\n"
-        "🎮 الآن، يرجى إرسال *Free Fire ID* الخاص بك\n"
-        "📱 مثال: 123456789\n\n"
-        "⚡ سيتم توصيل النجوم خلال دقائق من إرسال الـ ID",
-        parse_mode="Markdown"
+        f"مرحباً {user.first_name}، اختر ما تريد من متجر اللاشيء. اضغط الزر بالأسفل:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    logger.info(f"👤 {user.id} استخدم /start")
 
-async def handle_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    freefire_id = update.message.text.strip()
+async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """يتلقى البيانات المرسلة من الـ Web App (عندما يضغط المستخدم على زر الشراء)."""
+    user_id = update.effective_user.id
+    raw_data = update.effective_message.web_app_data.data
     
-    order = bot_instance.get_order(user_id)
-    
-    if not order or order.get("status") != "waiting_id":
-        return
-    
-    if not freefire_id.isdigit() or len(freefire_id) < 8:
-        await update.message.reply_text(
-            "❌ Free Fire ID غير صحيح!\n\n"
-            "يرجى إرسال رقم ID صحيح (8 أرقام أو أكثر)"
-        )
-        return
-    
-    bot_instance.update_freefire_id(user_id, freefire_id)
-    
-    await update.message.reply_text(
-        "✅ *تم استلام Free Fire ID بنجاح!*\n\n"
-        f"🆔 ID: `{freefire_id}`\n"
-        f"💎 الباقة: {bot_instance.packages[order['package']]['name']}\n\n"
-        "⏳ جاري معالجة طلبك...\n"
-        "🚀 سيتم توصيل النجوم خلال 5-10 دقائق\n\n"
-        "📧 سنرسل لك إشعار عند اكتمال الطلب!",
-        parse_mode="Markdown"
-    )
-
-async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    order = bot_instance.get_order(user_id)
-    
-    if not order:
-        await query.edit_message_text(
-            "📦 *طلباتي*\n\n"
-            "❌ ليس لديك أي طلبات حالياً\n\n"
-            "🛒 ابدأ بشراء باقة الآن!",
-            parse_mode="Markdown"
-        )
-        return
-    
-    status_text = {
-        "waiting_id": "بانتظار Free Fire ID",
-        "processing": "قيد المعالجة",
-        "completed": "مكتمل"
-    }
-    
-    package_name = bot_instance.packages[order['package']]['name']
-    
-    text = f"""
-📦 *طلبك الحالي:*
-
-💎 الباقة: {package_name}
-⭐ المدفوع: {order['stars_paid']} نجمة
-🆔 Free Fire ID: `{order['freefire_id']}`
-📌 الحالة: {status_text[order['status']]}
-🕒 التاريخ: {datetime.fromisoformat(order['time']).strftime('%Y-%m-%d %H:%M')}
-    """
-    
-    keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
-
-async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    help_text = """
-ℹ️ *كيفية الاستخدام:*
-
-1️⃣ اضغط على "شراء نجوم فري فاير"
-2️⃣ اختر الباقة المناسبة
-3️⃣ ادفع بنجوم تليجرام
-4️⃣ أرسل Free Fire ID الخاص بك
-5️⃣ انتظر 5-10 دقائق للتوصيل
-
-💡 *ملاحظات مهمة:*
-• تأكد من Free Fire ID قبل الإرسال
-• النجوم تصل خلال 5-10 دقائق
-• الدفع آمن 100٪ عبر تليجرام
-    """
-    
-    keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=reply_markup)
-
-async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    keyboard = [
-        [InlineKeyboardButton("🛒 شراء نجوم فري فاير", callback_data="buy")],
-        [InlineKeyboardButton("📦 طلباتي", callback_data="my_orders")],
-        [InlineKeyboardButton("ℹ️ المساعدة", callback_data="help")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(
-        "🎮 *القائمة الرئيسية*\n\nاختر ما تريد:",
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
-
-# ============= Webhook Handler =============
-@app.route(f'/{BOT_TOKEN}', methods=['POST'])
-def webhook():
-    """استقبال التحديثات من تليجرام"""
     try:
-        update = Update.de_json(flask_request.get_json(force=True), application.bot)
-        application.update_queue.put_nowait(update)
-        return jsonify({"ok": True})
-    except Exception as e:
-        print(f"Error in webhook: {e}")
-        return jsonify({"ok": False}), 500
+        data = json.loads(raw_data)
+        category = data.get('category')
+        amount = int(data.get('amount', 0))
+    except (json.JSONDecodeError, ValueError):
+        await update.effective_message.reply_text("❌ بيانات المنتج غير صالحة.")
+        logger.error(f"❌ [{user_id}] بيانات WebApp خاطئة: {raw_data}")
+        return
 
-# ============= إعداد وتشغيل البوت =============
-application = Application.builder().token(BOT_TOKEN).build()
-
-# إضافة المعالجات
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CallbackQueryHandler(show_packages, pattern="^buy$"))
-application.add_handler(CallbackQueryHandler(process_package_selection, pattern="^package_"))
-application.add_handler(CallbackQueryHandler(show_my_orders, pattern="^my_orders$"))
-application.add_handler(CallbackQueryHandler(show_help, pattern="^help$"))
-application.add_handler(CallbackQueryHandler(back_to_main, pattern="^back_to_main$"))
-application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_freefire_id))
-
-if __name__ == "__main__":
-    print("🚀 Starting application...")
+    # 1. التحقق من أن المنتج والسعر موجودان وصالحين
+    product_info = PRODUCTS.get(category)
+    if not product_info or product_info['amount'] != amount:
+        await update.effective_message.reply_text("❌ المنتج أو السعر غير مطابق للقائمة.")
+        logger.warning(f"⚠️ [{user_id}] محاولة دفع بسعر غير صحيح: {category} - {amount}")
+        return
     
-    # تهيئة البوت
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
+    if not STAR_PROVIDER_TOKEN:
+        await update.effective_message.reply_text("❌ لم يتم إعداد رمز الدفع على البوت.")
+        return
+
+    # 2. إعداد الفاتورة (Invoice)
+    title = f"{product_info['name']} ({amount/1000:.0f}K Stars)"
+    payload = f"order_{user_id}_{category}_{amount}"
     
-    # إعداد Webhook إذا كان متوفراً
-    if WEBHOOK_URL:
-        webhook_url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
-        loop.run_until_complete(application.bot.set_webhook(webhook_url))
-        print(f"✅ Webhook set to: {webhook_url}")
-        print(f"🌐 API يعمل على المنفذ: {PORT}")
+    await update.effective_message.reply_invoice(
+        title=title,
+        description=f"سعر اللاشيء: {amount} نجوم.",
+        payload=payload,
+        provider_token=STAR_PROVIDER_TOKEN,
+        currency="XTR",  # عملة نجوم تيليجرام
+        prices=[{'label': "السعر", 'amount': amount}],
+        is_flexible=False
+    )
+    logger.info(f"📄 [{user_id}] أُنشئت فاتورة لـ: {category} - {amount:,} XTR")
+
+async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """يتم استدعاؤه قبل الدفع للتحقق من الفاتورة."""
+    query = update.pre_checkout_query
+    
+    # يمكن هنا إضافة تحققات أكثر تعقيداً
+    if query.currency != "XTR":
+        await query.answer(ok=False, error_message="العملة غير مدعومة.")
+        return
         
-        # تشغيل Flask
-        app.run(host='0.0.0.0', port=PORT)
-    else:
-        # استخدام Polling للتطوير المحلي
-        print("⚠️ WEBHOOK_URL not set, using polling mode")
-        print(f"🌐 API يعمل على المنفذ: {PORT}")
-        
-        # تشغيل Flask في thread منفصل
-        from threading import Thread
-        flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=PORT, debug=False))
-        flask_thread.daemon = True
-        flask_thread.start()
-        
-        print("🤖 البوت يعمل الآن...")
-        loop.run_until_complete(application.updater.start_polling())
-        loop.run_forever()
+    await query.answer(ok=True)
+    logger.info(f"✅ [{query.from_user.id}] تحقق ما قبل الدفع ناجح.")
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """يتم استدعاؤه بعد الدفع الناجح."""
+    user = update.effective_user
+    payment = update.effective_message.successful_payment
+    
+    # 1. استخراج بيانات الطلب
+    try:
+        parts = payment.invoice_payload.split("_")
+        category = parts[2]
+        amount_paid = payment.total_amount
+    except (IndexError, ValueError):
+        category = "Unknown"
+        amount_paid = payment.total_amount
+
+    # 2. إرسال رسالة التأكيد
+    await update.effective_message.reply_text(
+        f"✅ تم الدفع بنجاح يا {user.first_name}!\n\n"
+        f"📦 المنتج: {category.capitalize()}\n"
+        f"💰 المبلغ المدفوع: {amount_paid:,} ⭐\n\n"
+        f"شكراً لك!"
+    )
+    
+    # 3. خطوة تنفيذ الخدمة (أهم خطوة)
+    # ------------------------------------
+    # هنا يجب أن تضع الكود الذي ينفذ عملية الشراء الحقيقية.
+    # بما أن هذا الكود لا يستخدم قاعدة بيانات:
+    # يمكنك إرسال إشعار إلى لوحة تحكم خارجية، أو إرسال رسالة للأدمن، إلخ.
+    # logger.info(f"🔥 نفذ الآن خدمة {category} للمستخدم {user.id}")
+    # ------------------------------------
+    
+    logger.info(f"💳 [{user.id}] دفع ناجح: {amount_paid:,} XTR لـ {category}")
+
+
+# ================== التشغيل ==================
+
+async def post_init(application):
+    """يتم تشغيله بعد بناء التطبيق."""
+    if not STAR_PROVIDER_TOKEN:
+        logger.error("❌ STAR_PROVIDER_TOKEN غير موجود. لن يعمل الدفع.")
+    bot = await application.bot.get_me()
+    logger.info(f"✅ البوت جاهز: @{bot.username}")
+    logger.info(f"🌐 WebApp: {WEB_APP_URL}")
+
+
+def main():
+    if not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN غير موجود.")
+        sys.exit(1)
+
+    app = (Application.builder().token(BOT_TOKEN).post_init(post_init).build())
+
+    # معالجات الأوامر
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    
+    # بما أنك تستخدم Railway و GitHub، يُفترض أنك تستخدم Webhook
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=BOT_TOKEN, # استخدم التوكن كمسار سري
+        webhook_url=f"{os.getenv('WEBHOOK_URL')}/{BOT_TOKEN}"
+    )
+
+if __name__ == '__main__':
+    main()
