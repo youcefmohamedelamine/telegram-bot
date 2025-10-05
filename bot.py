@@ -189,12 +189,18 @@ WEBAPP_HTML = """
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
-        function buyProduct(productId, price) {
-            tg.MainButton.setText('جاري المعالجة...');
-            tg.MainButton.show();
-            tg.sendData(JSON.stringify({ product: productId, price: price }));
-        }
         tg.ready();
+        
+        function buyProduct(productId, price) {
+            tg.sendData(JSON.stringify({ 
+                product: productId, 
+                price: price 
+            }));
+            
+            setTimeout(() => {
+                tg.close();
+            }, 300);
+        }
     </script>
 </body>
 </html>
