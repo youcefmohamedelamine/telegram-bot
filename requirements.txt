@@ -7,4 +7,3 @@ asyncpg
 
 pyTelegramBotAPI==4.15.4
 python-dotenv
-sqlite3-binary
