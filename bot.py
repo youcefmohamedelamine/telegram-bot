@@ -1,88 +1,128 @@
 import telebot
 from telebot import types
-from config import TOKEN
-from database import init_db, save_payment, get_photo_id
+# تأكد من أن ملف config.py يحتوي على TOKEN و STAR_PROVIDER_TOKEN
+from config import TOKEN, STAR_PROVIDER_TOKEN 
+# استيراد الوظائف الجديدة (PostgreSQL)
+from database import setup_db, save_payment 
 import os
+import asyncio # نحتاج إلى asyncio لتشغيل دالة setup_db
 
+# ----------------------------------
+# 1. إعداد البوت
+# ----------------------------------
 bot = telebot.TeleBot(TOKEN)
 
-# Инициализация базы данных
-init_db()
+# تهيئة قاعدة البيانات لمرة واحدة قبل بدء البوت
+# نستخدم asyncio.run لتشغيل دالة async مرة واحدة.
+print("⏳ جاري تهيئة قاعدة بيانات PostgreSQL...")
+try:
+    asyncio.run(setup_db())
+    print("✅ تم ربط قاعدة البيانات بنجاح.")
+except Exception as e:
+    print(f"❌ فشل ربط قاعدة البيانات: {e}")
+    # إذا فشل الاتصال بالقاعدة، يجب أن يتوقف البوت
+    # exit()
 
-# Функция для создания клавиатуры с кнопкой оплаты
+# ----------------------------------
+# 2. الدوال المساعدة
+# ----------------------------------
+
+# وظيفة لإنشاء زر الدفع (Pay Button)
 def payment_keyboard():
     keyboard = types.InlineKeyboardMarkup()
-    button = types.InlineKeyboardButton(text="Оплатить 1 XTR", pay=True)
-    keyboard.add(button)
-    return keyboard
+    # يجب أن يكون الزر pay=True في الفاتورة نفسها وليس هنا (هنا لإرسال الفاتورة)
+    # هذا الزر يتم استخدامه فقط إذا كنت لا تستخدم WebApp.
+    # بما أننا نستخدم send_invoice، نكتفي بالزر الذي يُنشئه Telegram تلقائيًا.
+    return keyboard 
 
-# Функция для создания клавиатуры с кнопкой "Купить изображение"
+# وظيفة لإنشاء زر "شراء صورة"
 def start_keyboard():
     keyboard = types.InlineKeyboardMarkup()
-    button = types.InlineKeyboardButton(text="Купить изображение", callback_data="buy_image")
+    button = types.InlineKeyboardButton(text="🛒 شراء صورة (1 ⭐)", callback_data="buy_image")
     keyboard.add(button)
     return keyboard
 
-# Обработчик команды /start
+# ----------------------------------
+# 3. معالجات الرسائل
+# ----------------------------------
+
+# معالج أمر /start
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     bot.send_message(
         message.chat.id,
-        "Добро пожаловать! Нажмите кнопку ниже, чтобы купить изображение.",
+        "أهلاً بك! اضغط الزر أدناه لشراء الصورة بنجمة تيليجرام واحدة (XTR).",
         reply_markup=start_keyboard()
     )
 
-# Обработчик нажатия на кнопку "Купить изображение"
+# معالج الضغط على زر "شراء صورة"
 @bot.callback_query_handler(func=lambda call: call.data == "buy_image")
 def handle_buy_image(call):
-    prices = [types.LabeledPrice(label="XTR", amount=1)]  # 1 XTR
+    # التأكد من وجود رمز الموفر
+    if not STAR_PROVIDER_TOKEN:
+        bot.send_message(call.message.chat.id, "❌ رمز موفر الدفع غير مُعدّ. تواصل مع المطور.")
+        return
+        
+    prices = [types.LabeledPrice(label="نجمة تيليجرام واحدة", amount=1000)] # 1 XTR = 1000 وحدة
+    
     bot.send_invoice(
         call.message.chat.id,
-        title="Покупка изображения",
-        description="Покупка изображения за 1 звезду!",
-        invoice_payload="image_purchase_payload",
-        provider_token="",
-        currency="XTR",
+        title="شراء الصورة",
+        description="صورة مميزة مقابل نجمة تيليجرام واحدة (XTR)!",
+        invoice_payload=f"image_purchase_{call.from_user.id}",
+        # استخدم رمز الموفر المُخزّن في config
+        provider_token=STAR_PROVIDER_TOKEN, 
+        currency="XTR", # العملة هي نجوم تيليجرام
         prices=prices,
-        reply_markup=payment_keyboard()
+        # لا نضع reply_markup هنا، نترك تيليجرام يُنشئ زر الدفع التلقائي
+        # reply_markup=payment_keyboard() 
     )
 
-# Обработчик проверки платежа
+# معالج التحقق المسبق من الدفع
 @bot.pre_checkout_query_handler(func=lambda query: True)
 def handle_pre_checkout_query(pre_checkout_query):
+    # لا تحتاج إلى تحققات إضافية لنجوم تيليجرام عادةً
     bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
 
-# Обработчик успешного платежа
+# معالج الدفع الناجح
 @bot.message_handler(content_types=['successful_payment'])
 def handle_successful_payment(message):
     user_id = message.from_user.id
-    payment_id = message.successful_payment.provider_payment_charge_id  # Или другой идентификатор платежа
+    # استخدم transaction_id كمعرف دفع فريد
+    payment_id = message.successful_payment.telegram_payment_charge_id
     amount = message.successful_payment.total_amount
     currency = message.successful_payment.currency
 
-    # Сначала отправляем сообщение о покупке
-    bot.send_message(message.chat.id, "✅ Платеж принят, пожалуйста, ожидайте фото. Оно скоро придет!")
+    # 1. إرسال رسالة التأكيد
+    bot.send_message(message.chat.id, "✅ تم قبول الدفع، يرجى الانتظار لتلقي الصورة! 🥳")
     
-    # Сохраняем информацию о платеже в базу данных
-    save_payment(user_id, payment_id, amount, currency)
+    # 2. حفظ معلومات الدفع في قاعدة البيانات (غير متزامن - سنستخدم asyncio.run مؤقتًا)
+    try:
+        # بما أن save_payment أصبحت async، يجب تشغيلها بهذه الطريقة في كود متزامن
+        asyncio.run(save_payment(user_id, payment_id, amount, currency))
+    except Exception as e:
+        print(f"❌ خطأ في حفظ الدفع في قاعدة البيانات: {e}")
 
-    # После этого отправляем фото
+    # 3. إرسال الصورة
     photo_path = 'img/img-X9ptcIuiOMICY0BUQukCpVYS.png'
     if os.path.exists(photo_path):
         with open(photo_path, 'rb') as photo:
-            bot.send_photo(message.chat.id, photo, caption="🥳Спасибо за вашу покупку!🤗")
+            bot.send_photo(message.chat.id, photo, caption="🥳شكراً لك على الشراء!🤗")
     else:
-        bot.send_message(message.chat.id, "Извините, изображение не найдено.")
+        bot.send_message(message.chat.id, "عذراً، الصورة غير موجودة على الخادم.")
 
-
-# Обработчик команды /paysupport
+# معالج أمر /paysupport
 @bot.message_handler(commands=['paysupport'])
 def handle_pay_support(message):
     bot.send_message(
         message.chat.id,
-        "Покупка изображения не подразумевает возврат средств. "
-        "Если у вас есть вопросы, пожалуйста, свяжитесь с нами."
+        "شراء الصور لا يتضمن استرداداً للمبالغ المدفوعة. "
+        "إذا كانت لديك أية استفسارات، يرجى التواصل مع الدعم الفني."
     )
 
-# Запуск бота
-bot.polling()
+# ----------------------------------
+# 4. تشغيل البوت (Polling)
+# ----------------------------------
+# إذا كنت تستخدم Railway، يجب عليك استخدام الـ Webhook بدلاً من Polling.
+# لكن إذا كنت مصرًا على Polling، يمكن أن يعمل لفترة وجيزة.
+#bot.polling()
