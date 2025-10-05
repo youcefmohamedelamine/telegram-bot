@@ -2,149 +2,61 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>متجر اللاشيء</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             color: white;
-            padding: 20px 20px 80px 20px;
+            padding: 20px;
         }
-        
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-        }
-        
-        .header {
-            text-align: center;
-            padding: 20px 0;
-            animation: fadeInDown 0.8s;
-        }
-        
-        .header h1 {
-            font-size: 2em;
-            margin-bottom: 8px;
-        }
-        
-        .products-section {
-            margin: 20px 0;
-            animation: fadeInUp 1s;
-        }
-        
-        .product-grid {
-            display: grid;
-            gap: 15px;
-        }
-        
+        .container { max-width: 500px; margin: 0 auto; }
+        .header { text-align: center; padding: 20px 0; }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
         .product-card {
-            background: rgba(255, 255, 255, 0.15);
+            background: rgba(255,255,255,0.15);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 15px;
+            margin: 15px 0;
             border: 2px solid transparent;
-            transition: all 0.3s;
         }
-        
         .product-card.selected {
             border-color: #4ade80;
-            background: rgba(74, 222, 128, 0.2);
+            background: rgba(74,222,128,0.2);
         }
-        
         .product-header {
             display: flex;
             align-items: center;
             gap: 10px;
             margin-bottom: 10px;
         }
-        
-        .product-icon {
-            font-size: 2em;
-        }
-        
-        .product-info {
-            flex: 1;
-        }
-        
-        .product-name {
-            font-size: 1.2em;
-            font-weight: bold;
-        }
-        
-        .product-description {
-            opacity: 0.9;
-            font-size: 0.9em;
-        }
-        
+        .product-icon { font-size: 2em; }
+        .product-name { font-size: 1.2em; font-weight: bold; }
+        .product-description { opacity: 0.9; font-size: 0.9em; }
         .price-options {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
             margin-top: 10px;
         }
-        
         .price-btn {
-            background: rgba(255, 255, 255, 0.3);
-            border: 2px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255,255,255,0.3);
+            border: 2px solid rgba(255,255,255,0.5);
             padding: 8px 15px;
             border-radius: 10px;
             color: white;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s;
             font-size: 0.9em;
         }
-        
-        .price-btn:active,
         .price-btn.selected {
             background: #4ade80;
             border-color: #4ade80;
-            transform: scale(0.95);
-        }
-        
-        .selection-indicator {
-            display: none;
-            align-items: center;
-            gap: 10px;
-            background: rgba(74, 222, 128, 0.2);
-            padding: 12px;
-            border-radius: 10px;
-            margin-top: 15px;
-        }
-        
-        .selection-indicator.show {
-            display: flex;
-        }
-        
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
     </style>
 </head>
@@ -155,57 +67,48 @@
             <p>اختر منتجاً وسعره</p>
         </div>
         
-        <div class="selection-indicator" id="selectionInfo">
-            <span style="flex: 1;">✅ تم الاختيار</span>
-            <span id="selectedText"></span>
+        <div class="product-card" data-category="small">
+            <div class="product-header">
+                <div class="product-icon">🔹</div>
+                <div>
+                    <div class="product-name">لاشيء صغير</div>
+                    <div class="product-description">مثالي للمبتدئين</div>
+                </div>
+            </div>
+            <div class="price-options">
+                <button class="price-btn" data-amount="5000">5K ⭐</button>
+                <button class="price-btn" data-amount="10000">10K ⭐</button>
+                <button class="price-btn" data-amount="15000">15K ⭐</button>
+            </div>
         </div>
         
-        <div class="products-section">
-            <div class="product-grid">
-                <div class="product-card" data-category="small">
-                    <div class="product-header">
-                        <div class="product-icon">🔹</div>
-                        <div class="product-info">
-                            <div class="product-name">لاشيء صغير</div>
-                            <div class="product-description">مثالي للمبتدئين</div>
-                        </div>
-                    </div>
-                    <div class="price-options">
-                        <button class="price-btn" data-amount="5000">5K ⭐</button>
-                        <button class="price-btn" data-amount="10000">10K ⭐</button>
-                        <button class="price-btn" data-amount="15000">15K ⭐</button>
-                    </div>
+        <div class="product-card" data-category="medium">
+            <div class="product-header">
+                <div class="product-icon">🔷</div>
+                <div>
+                    <div class="product-name">لاشيء متوسط</div>
+                    <div class="product-description">الأكثر شعبية</div>
                 </div>
-                
-                <div class="product-card" data-category="medium">
-                    <div class="product-header">
-                        <div class="product-icon">🔷</div>
-                        <div class="product-info">
-                            <div class="product-name">لاشيء متوسط</div>
-                            <div class="product-description">الأكثر شعبية</div>
-                        </div>
-                    </div>
-                    <div class="price-options">
-                        <button class="price-btn" data-amount="20000">20K ⭐</button>
-                        <button class="price-btn" data-amount="30000">30K ⭐</button>
-                        <button class="price-btn" data-amount="40000">40K ⭐</button>
-                    </div>
+            </div>
+            <div class="price-options">
+                <button class="price-btn" data-amount="20000">20K ⭐</button>
+                <button class="price-btn" data-amount="30000">30K ⭐</button>
+                <button class="price-btn" data-amount="40000">40K ⭐</button>
+            </div>
+        </div>
+        
+        <div class="product-card" data-category="large">
+            <div class="product-header">
+                <div class="product-icon">💠</div>
+                <div>
+                    <div class="product-name">لاشيء كبير</div>
+                    <div class="product-description">للمحترفين فقط</div>
                 </div>
-                
-                <div class="product-card" data-category="large">
-                    <div class="product-header">
-                        <div class="product-icon">💠</div>
-                        <div class="product-info">
-                            <div class="product-name">لاشيء كبير</div>
-                            <div class="product-description">للمحترفين فقط</div>
-                        </div>
-                    </div>
-                    <div class="price-options">
-                        <button class="price-btn" data-amount="50000">50K ⭐</button>
-                        <button class="price-btn" data-amount="75000">75K ⭐</button>
-                        <button class="price-btn" data-amount="100000">100K ⭐</button>
-                    </div>
-                </div>
+            </div>
+            <div class="price-options">
+                <button class="price-btn" data-amount="50000">50K ⭐</button>
+                <button class="price-btn" data-amount="75000">75K ⭐</button>
+                <button class="price-btn" data-amount="100000">100K ⭐</button>
             </div>
         </div>
     </div>
@@ -214,7 +117,7 @@
         const tg = window.Telegram.WebApp;
         
         if (!tg) {
-            document.body.innerHTML = '<div style="text-align:center;padding:50px;"><h2>❌ خطأ</h2><p>يعمل فقط في Telegram</p></div>';
+            document.body.innerHTML = '<div style="text-align:center;padding:50px;"><h2>خطأ</h2><p>يعمل فقط في Telegram</p></div>';
             throw new Error('Telegram WebApp غير متاح');
         }
 
@@ -223,15 +126,11 @@
 
         function updateMainButton() {
             if (selectedCategory && selectedAmount) {
-                tg.MainButton.setText(`شراء (${(selectedAmount / 1000).toFixed(0)}K ⭐)`);
+                tg.MainButton.setText(`شراء ${selectedAmount / 1000}K ⭐`);
                 tg.MainButton.show();
                 tg.MainButton.enable();
-                
-                document.getElementById('selectionInfo').classList.add('show');
-                document.getElementById('selectedText').textContent = `${(selectedAmount / 1000).toFixed(0)}K ⭐`;
             } else {
                 tg.MainButton.hide();
-                document.getElementById('selectionInfo').classList.remove('show');
             }
         }
 
@@ -266,9 +165,10 @@
                     amount: selectedAmount
                 });
                 
+                console.log('Sending:', data);
                 tg.sendData(data);
             } else {
-                tg.showAlert('❌ اختر منتجاً أولاً');
+                tg.showAlert('اختر منتجاً أولاً');
             }
         });
 
@@ -279,10 +179,10 @@
             tg.setHeaderColor('#667eea');
             tg.setBackgroundColor('#667eea');
         } catch (e) {
-            console.log('تعذر تعيين الألوان');
+            console.log('Could not set colors');
         }
 
-        console.log('✅ التطبيق جاهز');
+        console.log('App ready');
     </script>
 </body>
 </html>
