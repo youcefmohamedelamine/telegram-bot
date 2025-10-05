@@ -1,12 +1,22 @@
+# ============= Python Backend (Bot + API) =============
+# احفظ هذا الملف باسم: backend.py
+
 import json
 import os
 from datetime import datetime
 from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, PreCheckoutQueryHandler, filters, ContextTypes, CallbackQueryHandler
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from threading import Thread
 
-# ============= إعدادات البوت =============
-BOT_TOKEN = "7580086418:AAEE0shvKADPHNjaV-RyoBn0yO4IERyhUQQ"  # ضع توكن البوت هنا
-PROVIDER_TOKEN = ""  # فارغ لأن نجوم تليجرام لا تحتاج provider token
+# ============= إعدادات =============
+BOT_TOKEN = "7580086418:AAEE0shvKADPHNjaV-RyoBn0yO4IERyhUQQ"
+PROVIDER_TOKEN = ""
+
+# ============= Flask API =============
+app = Flask(__name__)
+CORS(app)  # للسماح بطلبات React
 
 class FreefireBot:
     def __init__(self):
@@ -20,7 +30,6 @@ class FreefireBot:
         }
     
     def load_orders(self):
-        """تحميل الطلبات من الملف"""
         try:
             if os.path.exists("orders.json"):
                 with open("orders.json", "r", encoding="utf-8") as f:
@@ -30,12 +39,10 @@ class FreefireBot:
         return {}
     
     def save_orders(self):
-        """حفظ الطلبات في الملف"""
         with open("orders.json", "w", encoding="utf-8") as f:
             json.dump(self.orders, f, indent=4, ensure_ascii=False)
     
     def create_order(self, user_id, package_id, stars_paid):
-        """إنشاء طلب جديد"""
         self.orders[str(user_id)] = {
             "package": package_id,
             "freefire_id": "لم يُرسل",
@@ -47,7 +54,6 @@ class FreefireBot:
         return True
     
     def update_freefire_id(self, user_id, freefire_id):
-        """تحديث Free Fire ID"""
         if str(user_id) in self.orders:
             self.orders[str(user_id)]["freefire_id"] = freefire_id
             self.orders[str(user_id)]["status"] = "processing"
@@ -56,7 +62,6 @@ class FreefireBot:
         return False
     
     def complete_order(self, user_id):
-        """تحديد الطلب كمكتمل"""
         if str(user_id) in self.orders:
             self.orders[str(user_id)]["status"] = "completed"
             self.save_orders()
@@ -64,18 +69,67 @@ class FreefireBot:
         return False
     
     def get_order(self, user_id):
-        """الحصول على تفاصيل طلب"""
         return self.orders.get(str(user_id))
+    
+    def get_all_orders(self):
+        return self.orders
+    
+    def get_statistics(self):
+        total_orders = len(self.orders)
+        completed_orders = sum(1 for o in self.orders.values() if o.get("status") == "completed")
+        waiting_orders = sum(1 for o in self.orders.values() if o.get("status") == "waiting_id")
+        processing_orders = sum(1 for o in self.orders.values() if o.get("status") == "processing")
+        total_revenue = sum(o.get("stars_paid", 0) for o in self.orders.values())
+        
+        return {
+            "total": total_orders,
+            "completed": completed_orders,
+            "waiting": waiting_orders,
+            "processing": processing_orders,
+            "revenue": total_revenue
+        }
 
-
-# إنشاء كائن البوت
 bot_instance = FreefireBot()
 
+# ============= API Endpoints =============
 
-# ============= معالجات البوت =============
+@app.route('/api/orders', methods=['GET'])
+def get_orders():
+    """الحصول على جميع الطلبات"""
+    return jsonify(bot_instance.get_all_orders())
+
+@app.route('/api/statistics', methods=['GET'])
+def get_statistics():
+    """الحصول على الإحصائيات"""
+    return jsonify(bot_instance.get_statistics())
+
+@app.route('/api/order/<user_id>', methods=['GET'])
+def get_order(user_id):
+    """الحصول على طلب محدد"""
+    order = bot_instance.get_order(user_id)
+    if order:
+        return jsonify(order)
+    return jsonify({"error": "Order not found"}), 404
+
+@app.route('/api/order/<user_id>/complete', methods=['POST'])
+def complete_order(user_id):
+    """إتمام طلب"""
+    if bot_instance.complete_order(user_id):
+        return jsonify({"success": True, "message": "Order completed"})
+    return jsonify({"error": "Order not found"}), 404
+
+@app.route('/api/order/<user_id>/delete', methods=['DELETE'])
+def delete_order(user_id):
+    """حذف طلب"""
+    if str(user_id) in bot_instance.orders:
+        del bot_instance.orders[str(user_id)]
+        bot_instance.save_orders()
+        return jsonify({"success": True, "message": "Order deleted"})
+    return jsonify({"error": "Order not found"}), 404
+
+# ============= Telegram Bot Handlers =============
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """رسالة الترحيب"""
     keyboard = [
         [InlineKeyboardButton("🛒 شراء نجوم فري فاير", callback_data="buy")],
         [InlineKeyboardButton("📦 طلباتي", callback_data="my_orders")],
@@ -96,15 +150,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 اختر ما تريد من القائمة أدناه 👇
     """
     
-    await update.message.reply_text(
-        welcome_text,
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
-
+    await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
 
 async def show_packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض الباقات المتاحة"""
     query = update.callback_query
     await query.answer()
     
@@ -126,9 +174,7 @@ async def show_packages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-
 async def process_package_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة اختيار الباقة وإرسال فاتورة"""
     query = update.callback_query
     await query.answer()
     
@@ -139,7 +185,6 @@ async def process_package_selection(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text("❌ حدث خطأ، يرجى المحاولة مرة أخرى")
         return
     
-    # إرسال فاتورة الدفع بنجوم تليجرام
     title = f"💎 {package['name']}"
     description = f"شراء {package['name']} عبر نجوم تليجرام"
     payload = f"freefire_{package_id}_{query.from_user.id}"
@@ -152,7 +197,7 @@ async def process_package_selection(update: Update, context: ContextTypes.DEFAUL
         description=description,
         payload=payload,
         provider_token=PROVIDER_TOKEN,
-        currency="XTR",  # عملة نجوم تليجرام
+        currency="XTR",
         prices=prices,
         start_parameter="freefire-payment"
     )
@@ -164,32 +209,23 @@ async def process_package_selection(update: Update, context: ContextTypes.DEFAUL
         f"اضغط على زر الدفع لإكمال العملية 👇"
     )
 
-
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """التحقق من الدفع قبل إتمامه"""
     query = update.pre_checkout_query
-    
-    # يمكنك إضافة فحوصات هنا إذا أردت
     await query.answer(ok=True)
 
-
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الدفع الناجح"""
     payment = update.message.successful_payment
     user_id = update.message.from_user.id
     
-    # استخراج معلومات الباقة من payload
     payload_parts = payment.invoice_payload.split("_")
     package_id = payload_parts[1]
     
-    # إنشاء الطلب
     bot_instance.create_order(
         user_id=user_id,
         package_id=package_id,
         stars_paid=payment.total_amount
     )
     
-    # طلب Free Fire ID
     await update.message.reply_text(
         "✅ *تم الدفع بنجاح!*\n\n"
         "🎮 الآن، يرجى إرسال *Free Fire ID* الخاص بك\n"
@@ -198,22 +234,15 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         parse_mode="Markdown"
     )
 
-
 async def handle_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة استلام Free Fire ID"""
     user_id = update.message.from_user.id
     freefire_id = update.message.text.strip()
     
-    # التحقق من وجود طلب بانتظار ID
     order = bot_instance.get_order(user_id)
     
-    if not order:
+    if not order or order.get("status") != "waiting_id":
         return
     
-    if order.get("status") != "waiting_id":
-        return
-    
-    # التحقق من صحة ID (أرقام فقط)
     if not freefire_id.isdigit() or len(freefire_id) < 8:
         await update.message.reply_text(
             "❌ Free Fire ID غير صحيح!\n\n"
@@ -221,7 +250,6 @@ async def handle_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
     
-    # تحديث الطلب
     bot_instance.update_freefire_id(user_id, freefire_id)
     
     await update.message.reply_text(
@@ -233,13 +261,8 @@ async def handle_freefire_id(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "📧 سنرسل لك إشعار عند اكتمال الطلب!",
         parse_mode="Markdown"
     )
-    
-    # هنا يمكنك إرسال إشعار للمسؤول لمعالجة الطلب يدوياً
-    # أو ربطه بـ API لشحن تلقائي
-
 
 async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض طلبات المستخدم"""
     query = update.callback_query
     await query.answer()
     
@@ -255,12 +278,6 @@ async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    status_emoji = {
-        "waiting_id": "⏳",
-        "processing": "🔄",
-        "completed": "✅"
-    }
-    
     status_text = {
         "waiting_id": "بانتظار Free Fire ID",
         "processing": "قيد المعالجة",
@@ -275,7 +292,7 @@ async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💎 الباقة: {package_name}
 ⭐ المدفوع: {order['stars_paid']} نجمة
 🆔 Free Fire ID: `{order['freefire_id']}`
-{status_emoji[order['status']]} الحالة: {status_text[order['status']]}
+📌 الحالة: {status_text[order['status']]}
 🕒 التاريخ: {datetime.fromisoformat(order['time']).strftime('%Y-%m-%d %H:%M')}
     """
     
@@ -284,9 +301,7 @@ async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
-
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض المساعدة"""
     query = update.callback_query
     await query.answer()
     
@@ -303,9 +318,6 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • تأكد من Free Fire ID قبل الإرسال
 • النجوم تصل خلال 5-10 دقائق
 • الدفع آمن 100٪ عبر تليجرام
-
-📞 *الدعم الفني:*
-للمساعدة تواصل مع: @YourSupportUsername
     """
     
     keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
@@ -313,9 +325,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(help_text, parse_mode="Markdown", reply_markup=reply_markup)
 
-
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """العودة للقائمة الرئيسية"""
     query = update.callback_query
     await query.answer()
     
@@ -332,13 +342,10 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-
 # ============= تشغيل البوت =============
-def main():
-    """تشغيل البوت"""
+def run_bot():
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # المعالجات
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(show_packages, pattern="^buy$"))
     application.add_handler(CallbackQueryHandler(process_package_selection, pattern="^package_"))
@@ -352,6 +359,14 @@ def main():
     print("🤖 البوت يعمل الآن...")
     application.run_polling()
 
-
+# ============= تشغيل كل شيء =============
 if __name__ == "__main__":
-    main()
+    # تشغيل Flask API في thread منفصل
+    flask_thread = Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False))
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    print("🌐 API يعمل على: http://localhost:5000")
+    
+    # تشغيل البوت
+    run_bot()
