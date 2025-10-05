@@ -5,5 +5,5 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Получаем значения переменных окружения
-TOKEN = os.getenv('TOKEN')
+TOKEN = os.getenv("TOKEN") 
 DATABASE = os.getenv('DATABASE')
