@@ -337,8 +337,7 @@ PRODUCTS = {
 # دالة البداية
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    webapp_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN', 'localhost')}"
-    
+    webapp_url = os.getenv('webapp_url', 'https://winterlandbot-production.up.railway.app')
     keyboard = [
         [InlineKeyboardButton("🛍️ فتح المتجر", web_app=WebAppInfo(url=webapp_url))],
         [InlineKeyboardButton("ℹ️ معلومات", callback_data="info")],
