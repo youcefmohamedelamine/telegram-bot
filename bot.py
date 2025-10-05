@@ -791,7 +791,7 @@ def main():
             url_path=BOT_TOKEN,
             webhook_url=f"{WEBHOOK_URL}/{BOT_TOKEN}",
             drop_pending_updates=True,
-            allowed_updates=["message", "pre_checkout_query", "web_app_data"],  # ✅ مصلح
+            allowed_updates=["message", "pre_checkout_query"],
             secret_token=WEBHOOK_SECRET if WEBHOOK_SECRET and len(WEBHOOK_SECRET) >= 10 else None
         )
     else:
@@ -811,7 +811,7 @@ def main():
         try:
             app.run_polling(
                 drop_pending_updates=True,
-                allowed_updates=["message", "pre_checkout_query", "web_app_data"],  # ✅ مصلح
+                allowed_updates=["message", "pre_checkout_query"],
                 close_loop=False
             )
         except KeyboardInterrupt:
