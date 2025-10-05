@@ -6,55 +6,35 @@
     <title>متجر اللاشيء</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            font-family: -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             padding: 20px;
+            min-height: 100vh;
+            margin: 0;
         }
         .container { max-width: 500px; margin: 0 auto; }
-        .header { text-align: center; padding: 20px 0; }
-        .header h1 { font-size: 2em; margin-bottom: 8px; }
-        .product-card {
+        .header { text-align: center; padding: 20px; }
+        .product {
             background: rgba(255,255,255,0.15);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 15px;
             margin: 15px 0;
-            border: 2px solid transparent;
         }
-        .product-card.selected {
-            border-color: #4ade80;
-            background: rgba(74,222,128,0.2);
-        }
-        .product-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .product-icon { font-size: 2em; }
-        .product-name { font-size: 1.2em; font-weight: bold; }
-        .product-description { opacity: 0.9; font-size: 0.9em; }
-        .price-options {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        .price-btn {
+        .product h2 { margin: 0 0 10px 0; }
+        button {
             background: rgba(255,255,255,0.3);
             border: 2px solid rgba(255,255,255,0.5);
-            padding: 8px 15px;
+            padding: 10px 20px;
             border-radius: 10px;
             color: white;
-            font-weight: bold;
             cursor: pointer;
-            font-size: 0.9em;
+            margin: 5px;
+            font-size: 14px;
         }
-        .price-btn.selected {
+        button.selected {
             background: #4ade80;
             border-color: #4ade80;
         }
@@ -67,49 +47,28 @@
             <p>اختر منتجاً وسعره</p>
         </div>
         
-        <div class="product-card" data-category="small">
-            <div class="product-header">
-                <div class="product-icon">🔹</div>
-                <div>
-                    <div class="product-name">لاشيء صغير</div>
-                    <div class="product-description">مثالي للمبتدئين</div>
-                </div>
-            </div>
-            <div class="price-options">
-                <button class="price-btn" data-amount="5000">5K ⭐</button>
-                <button class="price-btn" data-amount="10000">10K ⭐</button>
-                <button class="price-btn" data-amount="15000">15K ⭐</button>
-            </div>
+        <div class="product" data-category="small">
+            <h2>🔹 لاشيء صغير</h2>
+            <p>مثالي للمبتدئين</p>
+            <button data-amount="5000">5K ⭐</button>
+            <button data-amount="10000">10K ⭐</button>
+            <button data-amount="15000">15K ⭐</button>
         </div>
         
-        <div class="product-card" data-category="medium">
-            <div class="product-header">
-                <div class="product-icon">🔷</div>
-                <div>
-                    <div class="product-name">لاشيء متوسط</div>
-                    <div class="product-description">الأكثر شعبية</div>
-                </div>
-            </div>
-            <div class="price-options">
-                <button class="price-btn" data-amount="20000">20K ⭐</button>
-                <button class="price-btn" data-amount="30000">30K ⭐</button>
-                <button class="price-btn" data-amount="40000">40K ⭐</button>
-            </div>
+        <div class="product" data-category="medium">
+            <h2>🔷 لاشيء متوسط</h2>
+            <p>الأكثر شعبية</p>
+            <button data-amount="20000">20K ⭐</button>
+            <button data-amount="30000">30K ⭐</button>
+            <button data-amount="40000">40K ⭐</button>
         </div>
         
-        <div class="product-card" data-category="large">
-            <div class="product-header">
-                <div class="product-icon">💠</div>
-                <div>
-                    <div class="product-name">لاشيء كبير</div>
-                    <div class="product-description">للمحترفين فقط</div>
-                </div>
-            </div>
-            <div class="price-options">
-                <button class="price-btn" data-amount="50000">50K ⭐</button>
-                <button class="price-btn" data-amount="75000">75K ⭐</button>
-                <button class="price-btn" data-amount="100000">100K ⭐</button>
-            </div>
+        <div class="product" data-category="large">
+            <h2>💠 لاشيء كبير</h2>
+            <p>للمحترفين فقط</p>
+            <button data-amount="50000">50K ⭐</button>
+            <button data-amount="75000">75K ⭐</button>
+            <button data-amount="100000">100K ⭐</button>
         </div>
     </div>
     
@@ -117,72 +76,52 @@
         const tg = window.Telegram.WebApp;
         
         if (!tg) {
-            document.body.innerHTML = '<div style="text-align:center;padding:50px;"><h2>خطأ</h2><p>يعمل فقط في Telegram</p></div>';
-            throw new Error('Telegram WebApp غير متاح');
+            document.body.innerHTML = '<div style="text-align:center;padding:50px;">يعمل فقط في Telegram</div>';
+            throw new Error('Not in Telegram');
         }
 
-        let selectedCategory = null;
-        let selectedAmount = null;
+        let selected = null;
 
-        function updateMainButton() {
-            if (selectedCategory && selectedAmount) {
-                tg.MainButton.setText(`شراء ${selectedAmount / 1000}K ⭐`);
+        document.querySelectorAll('button[data-amount]').forEach(btn => {
+            btn.onclick = function() {
+                const cat = this.closest('.product').dataset.category;
+                const amt = parseInt(this.dataset.amount);
+                
+                document.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+                this.classList.add('selected');
+                
+                selected = { category: cat, amount: amt };
+                
+                tg.MainButton.setText('شراء ' + (amt / 1000) + 'K ⭐');
                 tg.MainButton.show();
                 tg.MainButton.enable();
-            } else {
-                tg.MainButton.hide();
-            }
-        }
-
-        document.querySelectorAll('.price-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const card = this.closest('.product-card');
-                const category = card.dataset.category;
-                const amount = parseInt(this.dataset.amount);
-
-                document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
-                document.querySelectorAll('.price-btn').forEach(b => b.classList.remove('selected'));
-
-                card.classList.add('selected');
-                this.classList.add('selected');
-
-                selectedCategory = category;
-                selectedAmount = amount;
-
-                if (tg.HapticFeedback?.impactOccurred) {
+                
+                if (tg.HapticFeedback) {
                     tg.HapticFeedback.impactOccurred('medium');
                 }
-
-                updateMainButton();
-            });
+            };
         });
 
         tg.MainButton.onClick(() => {
-            if (selectedCategory && selectedAmount) {
+            if (selected) {
                 const data = JSON.stringify({
                     action: 'buy',
-                    category: selectedCategory,
-                    amount: selectedAmount
+                    category: selected.category,
+                    amount: selected.amount
                 });
                 
                 console.log('Sending:', data);
                 tg.sendData(data);
-            } else {
-                tg.showAlert('اختر منتجاً أولاً');
             }
         });
 
         tg.ready();
         tg.expand();
-
+        
         try {
             tg.setHeaderColor('#667eea');
             tg.setBackgroundColor('#667eea');
-        } catch (e) {
-            console.log('Could not set colors');
-        }
-
-        console.log('App ready');
+        } catch (e) {}
     </script>
 </body>
 </html>
