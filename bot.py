@@ -192,14 +192,13 @@ WEBAPP_HTML = """
         tg.ready();
         
         function buyProduct(productId, price) {
+            // إرسال البيانات
             tg.sendData(JSON.stringify({ 
                 product: productId, 
                 price: price 
             }));
             
-            setTimeout(() => {
-                tg.close();
-            }, 300);
+            // لا تغلق WebApp - دع تيليجرام يغلقه تلقائياً بعد استلام البيانات
         }
     </script>
 </body>
