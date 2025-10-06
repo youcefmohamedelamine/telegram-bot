@@ -23,9 +23,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # أخذ التوكن من متغيرات البيئة
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8050433715:AAEtNaKR1cuGfWecar6FR8FSIG2QZqmfkDU")
 PORT = int(os.getenv("PORT", 8080))
-WEBAPP_URL = os.getenv('webapp_url', 'https://winterlandbot-production.up.railway.app').strip().lstrip('=').strip()
+WEBAPP_URL = 'https://winterlandbot-production.up.railway.app'
+
 if not BOT_TOKEN:
     logger.critical("❌ لم يتم العثور على BOT_TOKEN!")
     sys.exit(1)
@@ -225,6 +226,11 @@ def webapp():
 @app.route('/health')
 def health():
     return {'status': 'ok', 'service': 'telegram_bot', 'bot_running': bot_running}, 200
+
+@app.route('/favicon.ico')
+def favicon():
+    # إرجاع favicon فارغ لتجنب خطأ 404
+    return '', 204
 
 # قائمة المنتجات
 PRODUCTS = {
