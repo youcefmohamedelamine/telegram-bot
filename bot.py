@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # أخذ التوكن من متغيرات البيئة
-BOT_TOKEN = "8050433715:AAEtNaKR1cuGfWecar6FR8FSIG2QZqmfkDU"
+BOT_TOKEN = os.getenv(BOT_TOKEN)
 PORT = int(os.getenv("PORT", 8080))
 WEBAPP_URL = os.getenv('webapp_url', 'https://winterlandbot-production.up.railway.app').strip().lstrip('=').strip()
 if not BOT_TOKEN:
