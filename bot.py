@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # أخذ التوكن من متغيرات البيئة
-BOT_TOKEN = "7580086418:AAHqVeQNSAn0q8CK7EYUZUpgKuuHUApozzE"
+BOT_TOKEN = "8050433715:AAEtNaKR1cuGfWecar6FR8FSIG2QZqmfkDU"
 PORT = int(os.getenv("PORT", 8080))
 WEBAPP_URL = os.getenv('webapp_url', 'https://winterlandbot-production.up.railway.app')
 
@@ -330,7 +330,7 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             title=product['title'],
             description=f"شراء {product['title']}",
             payload=f"product_{product_id}",
-            provider_token="",
+            provider_token="1650291590:TEST:1727533301649_FRe30Y9YM35jtdx9",
             currency="XTR",
             prices=[LabeledPrice("المنتج", price)]
         )
