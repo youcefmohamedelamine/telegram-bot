@@ -431,7 +431,7 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             payload=f"product_{product.id.value}",
             provider_token="",
             currency="XTR",
-            prices=[LabeledPrice("السعر", product.price)]
+            prices=[LabeledPrice(product.title, product.price * 100)]
         )
         
         # Delete processing message
