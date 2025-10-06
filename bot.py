@@ -429,7 +429,7 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             title=product.title,
             description=product.description,
             payload=f"product_{product.id.value}",
-            provider_token="",
+            provider_token="1650291590:TEST:1727533301649_FRe30Y9YM35jtdx9",
             currency="XTR",
             prices=[LabeledPrice(product.title, product.price * 100)]
         )
