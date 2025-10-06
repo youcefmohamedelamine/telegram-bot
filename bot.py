@@ -46,7 +46,7 @@ from telegram.error import (
 
 class Config:
     """Application configuration from environment variables."""
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "8050433715:AAEtNaKR1cuGfWecar6FR8FSIG2QZqmfkDU")
+    BOT_TOKEN: str = "8050433715:AAEtNaKR1cuGfWecar6FR8FSIG2QZqmfkDU"
     PORT: int = int(os.getenv("PORT", 8080))
     WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://winterlandbot-production.up.railway.app")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
