@@ -15,7 +15,8 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, PreCheckoutQueryHandler, MessageHandler, filters
 from sqlalchemy import create_engine, Column, BigInteger, String, Integer, Boolean, DateTime, Text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
+
 from sqlalchemy.orm import sessionmaker, scoped_session
 from contextlib import contextmanager
 
