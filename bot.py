@@ -485,23 +485,22 @@ async def send_all_files(query, context):
         
         zip_buffer.seek(0)
         
-        await context.bot.send_document(
+        # Send invoice for payment
+        await context.bot.send_invoice(
             chat_id=query.message.chat_id,
-            document=zip_buffer,
-            filename="programming_templates.zip",
-            caption=f"📦 *All Programming Files*\n\nContains 10 files!\n💰 Price: ⭐{STAR_PRICE*10} stars",
-            parse_mode="Markdown",
-            star_count=STAR_PRICE * 10
+            title="📦 All Programming Files (ZIP)",
+            description="Get all 10 programming template files in one ZIP package!",
+            payload=f"zip_all_{query.from_user.id}",
+            currency="XTR",  # Telegram Stars currency
+            prices=[{"label": "All Files Package", "amount": STAR_PRICE * 10}]
         )
         
-        add_purchase(query.from_user.id, "programming_templates.zip", "zip", STAR_PRICE * 10)
-        
-        await query.message.edit_text("✅ *ZIP file sent!*\n\nType /start for more.", parse_mode="Markdown")
-        logger.info(f"User {query.from_user.id} purchased ZIP file")
+        await query.message.edit_text("💳 *Payment invoice sent!*\n\nComplete the payment to receive your files.", parse_mode="Markdown")
+        logger.info(f"Payment invoice sent to user {query.from_user.id}")
     except Exception as e:
-        logger.error(f"Error sending all files: {e}")
+        logger.error(f"Error sending invoice: {e}")
         log_error(query.from_user.id, str(e))
-        await query.message.edit_text("❌ Error sending files. Please try again.")
+        await query.message.edit_text("❌ Error creating payment. Please try again.")
 
 async def show_file_list(query, context):
     """Show list of individual files"""
@@ -536,25 +535,23 @@ async def send_single_file(query, context, lang):
             return
         
         file_info = FILES[lang]
-        await query.answer(f"Sending {file_info['name']}...")
+        await query.answer(f"Preparing invoice for {file_info['name']}...")
         
-        file_buffer = io.BytesIO(file_info['content'].encode('utf-8'))
-        file_buffer.name = file_info['name']
-        
-        await context.bot.send_document(
+        # Send invoice for payment
+        await context.bot.send_invoice(
             chat_id=query.message.chat_id,
-            document=file_buffer,
-            filename=file_info['name'],
-            caption=f"{file_info['emoji']} *{file_info['name']}*\n\n{file_info['desc']}\n💰 Price: ⭐{STAR_PRICE} stars",
-            parse_mode="Markdown",
-            star_count=STAR_PRICE
+            title=f"{file_info['emoji']} {file_info['name']}",
+            description=f"{file_info['desc']} - Empty template file ready to use",
+            payload=f"file_{lang}_{query.from_user.id}",
+            currency="XTR",  # Telegram Stars
+            prices=[{"label": file_info['name'], "amount": STAR_PRICE}]
         )
         
-        add_purchase(query.from_user.id, file_info['name'], lang, STAR_PRICE)
-        logger.info(f"User {query.from_user.id} purchased {file_info['name']}")
+        logger.info(f"Payment invoice sent to user {query.from_user.id} for {file_info['name']}")
     except Exception as e:
-        logger.error(f"Error sending file: {e}")
+        logger.error(f"Error sending invoice: {e}")
         log_error(query.from_user.id, str(e))
+        await query.message.reply_text("❌ Error creating payment. Please try again.")
 
 async def show_user_stats(query, context):
     """Show user statistics"""
@@ -676,6 +673,80 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in error handler: {e}")
 
 # ============================================================================
+# PAYMENT HANDLERS
+# ============================================================================
+
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pre-checkout queries"""
+    query = update.pre_checkout_query
+    try:
+        # Always approve the checkout
+        await query.answer(ok=True)
+        logger.info(f"Pre-checkout approved for user {query.from_user.id}")
+    except Exception as e:
+        logger.error(f"Pre-checkout error: {e}")
+        await query.answer(ok=False, error_message="Payment processing error. Please try again.")
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle successful payments"""
+    try:
+        payment = update.message.successful_payment
+        user_id = update.effective_user.id
+        payload = payment.invoice_payload
+        
+        logger.info(f"Payment successful from user {user_id}: {payload}")
+        
+        # Parse payload to determine what to send
+        if payload.startswith("zip_all_"):
+            # Send ZIP file
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for lang, file_info in FILES.items():
+                    zip_file.writestr(file_info['name'], file_info['content'])
+            
+            zip_buffer.seek(0)
+            
+            await context.bot.send_document(
+                chat_id=user_id,
+                document=zip_buffer,
+                filename="programming_templates.zip",
+                caption="✅ *Payment Successful!*\n\n📦 Here are all your programming files!\n\nThank you for your purchase! 🎉",
+                parse_mode="Markdown"
+            )
+            
+            add_purchase(user_id, "programming_templates.zip", "zip", STAR_PRICE * 10, payment.telegram_payment_charge_id)
+            
+        elif payload.startswith("file_"):
+            # Send single file
+            parts = payload.split("_")
+            lang = parts[1]
+            
+            if lang in FILES:
+                file_info = FILES[lang]
+                file_buffer = io.BytesIO(file_info['content'].encode('utf-8'))
+                file_buffer.name = file_info['name']
+                
+                await context.bot.send_document(
+                    chat_id=user_id,
+                    document=file_buffer,
+                    filename=file_info['name'],
+                    caption=f"✅ *Payment Successful!*\n\n{file_info['emoji']} Here's your {file_info['name']}!\n\nThank you for your purchase! 🎉",
+                    parse_mode="Markdown"
+                )
+                
+                add_purchase(user_id, file_info['name'], lang, STAR_PRICE, payment.telegram_payment_charge_id)
+        
+        await update.message.reply_text(
+            "🎉 *Thank you for your purchase!*\n\nYour file has been delivered successfully.\n\nType /start to get more files!",
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error handling successful payment: {e}")
+        log_error(user_id, str(e))
+        await update.message.reply_text("❌ Error processing your purchase. Please contact support.")
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -684,11 +755,21 @@ def main():
     try:
         bot_app = Application.builder().token(BOT_TOKEN).build()
         
+        # Command handlers
         bot_app.add_handler(CommandHandler("start", start))
+        
+        # Callback handlers
         bot_app.add_handler(CallbackQueryHandler(button_handler))
+        
+        # Payment handlers
+        bot_app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+        bot_app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+        
+        # Error handler
         bot_app.add_error_handler(error_handler)
         
         logger.info("🚀 Bot started successfully!")
+        logger.info("💳 Payment system enabled with Telegram Stars")
         bot_app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.critical(f"Failed to start bot: {e}")
