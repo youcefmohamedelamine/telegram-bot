@@ -14,7 +14,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/botdb")
-STAR_PRICE = 25
+STAR_PRICE = 999
 ADMIN_IDS = [123456789]
 
 logging.basicConfig(level=logging.INFO)
