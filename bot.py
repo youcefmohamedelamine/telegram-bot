@@ -1,6 +1,7 @@
 """
 Telegram Bot - Send Empty Programming Files in Different Languages
 Sends 10 different empty programming files in various languages
+Each file costs 999 Telegram Stars
 """
 
 import logging
@@ -14,6 +15,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 # ============================================================================
 
 BOT_TOKEN = "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg"
+STAR_PRICE = 999  # سعر كل ملف بالنجوم
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -190,7 +192,7 @@ fn main() {
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show main menu"""
     keyboard = [
-        [InlineKeyboardButton("📦 Get All Files (ZIP)", callback_data="get_all")],
+        [InlineKeyboardButton(f"📦 Get All Files (ZIP) - ⭐{STAR_PRICE*10}", callback_data="get_all")],
         [InlineKeyboardButton("📂 Choose Language", callback_data="show_files")],
         [InlineKeyboardButton("ℹ️ About", callback_data="about")]
     ]
@@ -201,6 +203,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 *Welcome to Programming Files Bot!*\n\n"
         "I can send you empty template files in different languages.\n\n"
         f"📁 *Available Files:*\n{file_list}\n\n"
+        f"💰 *Price:* ⭐{STAR_PRICE} stars per file\n\n"
         "Choose an option below:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -225,7 +228,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_single_file(query, context, lang)
 
 async def send_all_files(query, context):
-    """Send all files as ZIP"""
+    """Send all files as ZIP with star payment"""
     await query.message.edit_text("⏳ *Creating ZIP file...*", parse_mode="Markdown")
     
     # Create ZIP in memory
@@ -236,12 +239,14 @@ async def send_all_files(query, context):
     
     zip_buffer.seek(0)
     
+    # إرسال الملف بسعر النجوم
     await context.bot.send_document(
         chat_id=query.message.chat_id,
         document=zip_buffer,
         filename="programming_templates.zip",
-        caption="📦 *All Programming Files*\n\nContains 10 files in different languages!",
-        parse_mode="Markdown"
+        caption=f"📦 *All Programming Files*\n\nContains 10 files in different languages!\n💰 Price: ⭐{STAR_PRICE*10} stars",
+        parse_mode="Markdown",
+        star_count=STAR_PRICE * 10  # سعر جميع الملفات
     )
     
     await query.message.edit_text(
@@ -257,7 +262,7 @@ async def show_file_list(query, context):
     for lang, file_info in FILES.items():
         keyboard.append([
             InlineKeyboardButton(
-                f"{file_info['emoji']} {file_info['name']}", 
+                f"{file_info['emoji']} {file_info['name']} - ⭐{STAR_PRICE}", 
                 callback_data=f"file_{lang}"
             )
         ])
@@ -265,14 +270,15 @@ async def show_file_list(query, context):
     keyboard.append([InlineKeyboardButton("« Back", callback_data="back")])
     
     await query.message.edit_text(
-        "📂 *Choose a file to download:*\n\n"
+        f"📂 *Choose a file to download:*\n\n"
+        f"💰 Each file costs ⭐{STAR_PRICE} stars\n\n"
         "Select any programming language file below:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def send_single_file(query, context, lang):
-    """Send a single file"""
+    """Send a single file with star payment"""
     if lang not in FILES:
         await query.answer("❌ File not found!", show_alert=True)
         return
@@ -285,12 +291,14 @@ async def send_single_file(query, context, lang):
     file_buffer = io.BytesIO(file_info['content'].encode('utf-8'))
     file_buffer.name = file_info['name']
     
+    # إرسال الملف بسعر النجوم
     await context.bot.send_document(
         chat_id=query.message.chat_id,
         document=file_buffer,
         filename=file_info['name'],
-        caption=f"{file_info['emoji']} *{file_info['name']}*\n\n{file_info['desc']}",
-        parse_mode="Markdown"
+        caption=f"{file_info['emoji']} *{file_info['name']}*\n\n{file_info['desc']}\n💰 Price: ⭐{STAR_PRICE} stars",
+        parse_mode="Markdown",
+        star_count=STAR_PRICE  # سعر الملف الواحد
     )
     
     logger.info(f"Sent {file_info['name']} to user {query.from_user.id}")
@@ -312,6 +320,8 @@ async def show_about(query, context):
         "🎨 CSS\n"
         "🔵 Go\n"
         "🦀 Rust\n\n"
+        f"💰 *Price:* ⭐{STAR_PRICE} stars per file\n"
+        f"📦 All files (ZIP): ⭐{STAR_PRICE*10} stars\n\n"
         "Perfect for starting new projects quickly!\n\n"
         "Developer: @YourUsername",
         parse_mode="Markdown",
@@ -321,7 +331,7 @@ async def show_about(query, context):
 async def back_to_menu(query, context):
     """Go back to main menu"""
     keyboard = [
-        [InlineKeyboardButton("📦 Get All Files (ZIP)", callback_data="get_all")],
+        [InlineKeyboardButton(f"📦 Get All Files (ZIP) - ⭐{STAR_PRICE*10}", callback_data="get_all")],
         [InlineKeyboardButton("📂 Choose Language", callback_data="show_files")],
         [InlineKeyboardButton("ℹ️ About", callback_data="about")]
     ]
@@ -332,6 +342,7 @@ async def back_to_menu(query, context):
         "👋 *Welcome to Programming Files Bot!*\n\n"
         "I can send you empty template files in different languages.\n\n"
         f"📁 *Available Files:*\n{file_list}\n\n"
+        f"💰 *Price:* ⭐{STAR_PRICE} stars per file\n\n"
         "Choose an option below:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
