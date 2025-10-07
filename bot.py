@@ -47,9 +47,8 @@ from telegram.error import (
 
 class Config:
     """Application configuration from environment variables."""
-    BOT_TOKEN: str = "8050433715:AAEtNaKR1cuGfWecar6FR8FSIG2QZqmfkDU"
+    BOT_TOKEN: str = "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg"
     PORT: int = int(os.getenv("PORT", 8080))
-    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://winterlandbot-production.up.railway.app")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     MAX_RESTARTS: int = 3
     RETRY_DELAY: int = 2
