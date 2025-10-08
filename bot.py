@@ -1,532 +1,311 @@
-import logging
-import io
-import zipfile
-import os
-from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, PreCheckoutQueryHandler, MessageHandler, filters
-from sqlalchemy import create_engine, Column, BigInteger, String, Integer, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
+import React, { useState } from 'react';
+import { ShoppingCart, Code, Zap, Package, AlertCircle, Laugh } from 'lucide-react';
 
-# ============================================================================
-# CONFIG
-# ============================================================================
+const CleanTemplatesStore = () => {
+  const [cart, setCart] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [currentLang, setCurrentLang] = useState(null);
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/botdb")
-STAR_PRICE = 999
-ADMIN_IDS = [123456789]
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# ============================================================================
-# DATABASE
-# ============================================================================
-
-Base = declarative_base()
-
-class User(Base):
-    __tablename__ = 'users'
-    user_id = Column(BigInteger, primary_key=True)
-    username = Column(String(255))
-    join_date = Column(DateTime, default=datetime.utcnow)
-    total_purchases = Column(Integer, default=0)
-
-class Purchase(Base):
-    __tablename__ = 'purchases'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger)
-    file_name = Column(String(255))
-    stars_paid = Column(Integer)
-    purchase_date = Column(DateTime, default=datetime.utcnow)
-
-try:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    Base.metadata.create_all(engine)
-    Session = scoped_session(sessionmaker(bind=engine))
-    logger.info("✅ Database connected")
-except Exception as e:
-    logger.error(f"❌ Database error: {e}")
-    Session = None
-
-def save_user(user_id, username):
-    if Session is None:
-        return
-    try:
-        session = Session()
-        if not session.query(User).filter_by(user_id=user_id).first():
-            session.add(User(user_id=user_id, username=username))
-            session.commit()
-        session.close()
-    except:
-        pass
-
-def save_purchase(user_id, file_name, stars):
-    if Session is None:
-        return
-    try:
-        session = Session()
-        session.add(Purchase(user_id=user_id, file_name=file_name, stars_paid=stars))
-        user = session.query(User).filter_by(user_id=user_id).first()
-        if user:
-            user.total_purchases += 1
-        session.commit()
-        session.close()
-    except:
-        pass
-
-# ============================================================================
-# CLEAN FILES - القوة في البساطة!
-# ============================================================================
-
-FILES = {
-    "python": {
-        "name": "main.py",
-        "content": """# Python Clean Template
-# Zero bloat. Pure simplicity.
-# Start your project the right way.
-
-def main():
-    pass
-
-if __name__ == "__main__":
-    main()
-""",
-        "emoji": "🐍",
-        "desc": "Clean Python Template"
+  const STAR_PRICE = 999;
+  
+  const templates = {
+    python: {
+      name: "main.py",
+      emoji: "🐍",
+      desc: "Python النظيف",
+      joke: "الملف الوحيد الذي لن يرميه الـ garbage collector! 🗑️"
     },
-    "javascript": {
-        "name": "index.js",
-        "content": """// JavaScript Clean Template
-// No frameworks. No dependencies. Just code.
-// Perfect blank canvas for your project.
+    javascript: {
+      name: "index.js",
+      emoji: "💛",
+      desc: "JavaScript الصافي",
+      joke: "بدون undefined، بدون null، بس أنت ومشاكلك! 😅"
+    },
+    java: {
+      name: "Main.java",
+      emoji: "☕",
+      desc: "Java المركز",
+      joke: "3 مليار جهاز يشغلون Java... وأنت بعدك ما بلشت! ⏰"
+    },
+    cpp: {
+      name: "main.cpp",
+      emoji: "⚡",
+      desc: "C++ السريع",
+      joke: "سريع لدرجة إنه بيخلص قبل ما تفهم الكود! 🏃‍♂️"
+    },
+    csharp: {
+      name: "Program.cs",
+      emoji: "🔷",
+      desc: "C# الاحترافي",
+      joke: "Microsoft وافقت عليه شخصياً! (مش حقيقي بس يبان كويس) 🎭"
+    },
+    php: {
+      name: "index.php",
+      emoji: "🐘",
+      desc: "PHP الجديد",
+      joke: "نعم، الناس لسا بتستعمل PHP في 2025! 🦕"
+    },
+    html: {
+      name: "index.html",
+      emoji: "🌐",
+      desc: "HTML النقي",
+      joke: "بدون Bootstrap! نعم، هتكتب كل حاجة بإيدك يا بطل! 💪"
+    },
+    css: {
+      name: "style.css",
+      emoji: "🎨",
+      desc: "CSS الفاضي",
+      joke: "مش هنحط !important في كل سطر، وعد! 🤞"
+    },
+    go: {
+      name: "main.go",
+      emoji: "🔵",
+      desc: "Go المنطلق",
+      joke: "Google عملته عشان محدش يفهم C++ تاني! 🤯"
+    },
+    rust: {
+      name: "main.rs",
+      emoji: "🦀",
+      desc: "Rust الآمن",
+      joke: "الـ Compiler هيزعلك قبل ما البرنامج يشتغل! 😤"
+    }
+  };
+
+  const funnyReasons = [
+    "🎪 لأن حياتك محتاجة شوية فضاء... في الكود على الأقل!",
+    "🍕 أخف من بيتزا دومينوز (بس أغلى شوية)",
+    "🎭 مكتوب بحب... ومسح بحب أكتر!",
+    "🌟 الملفات دي فاضية لدرجة إنها فلسفية!",
+    "🎪 كل المبرمجين المشهورين بدأوا من صفحة بيضا (أو كذبوا)",
+    "🎨 أحسن من لوحة بيكاسو... على الأقل دي بتشتغل!",
+    "🚀 ناسا بتستخدمها (في أحلامنا)",
+    "💎 نظيفة لدرجة إن Marie Kondo هتفرح!",
+    "🎯 الكود الوحيد اللي مش فيه bugs... لسه!",
+    "🏆 فازت بجائزة 'أفضل ملف فاضي' 3 سنين متتالية!"
+  ];
+
+  const addToCart = (lang) => {
+    if (!cart.includes(lang)) {
+      setCart([...cart, lang]);
+    }
+  };
+
+  const buyBundle = () => {
+    setCart(Object.keys(templates));
+    setShowModal(true);
+  };
+
+  const getTotalPrice = () => {
+    return cart.length === 10 ? STAR_PRICE * 10 : cart.length * STAR_PRICE;
+  };
+
+  const showDetails = (lang) => {
+    setCurrentLang(lang);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+      {/* Header */}
+      <header className="bg-black bg-opacity-50 backdrop-blur-md p-6 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Code className="w-10 h-10 text-yellow-400" />
+            <div>
+              <h1 className="text-3xl font-bold">متجر القوالب "النظيفة" 😂</h1>
+              <p className="text-sm text-gray-300">لأن الكود الفاضي أحسن من الكود الغلط!</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="bg-purple-600 px-4 py-2 rounded-full flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              <span className="font-bold">{cart.length}</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="max-w-7xl mx-auto px-6 py-12">
+        <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-3xl p-8 text-center text-black mb-12">
+          <h2 className="text-4xl font-bold mb-4">🎉 العرض الخرافي!</h2>
+          <p className="text-2xl mb-6">10 ملفات فاضية تماماً بـ ⭐{STAR_PRICE * 10} نجمة فقط!</p>
+          <button 
+            onClick={buyBundle}
+            className="bg-black text-white px-8 py-4 rounded-full text-xl font-bold hover:bg-gray-800 transition-all transform hover:scale-105"
+          >
+            <Package className="inline mr-2" />
+            اشتري الباقة الكاملة (وفر 0%)
+          </button>
+          <p className="text-sm mt-3">* التوفير وهمي، بس الملفات حقيقية! 😉</p>
+        </div>
+
+        {/* Funny Reasons */}
+        <div className="bg-white bg-opacity-10 backdrop-blur-lg rounded-2xl p-8 mb-12">
+          <h3 className="text-3xl font-bold mb-6 text-center flex items-center justify-center gap-3">
+            <Laugh className="w-8 h-8 text-yellow-400" />
+            ليه القوالب النظيفة؟
+          </h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            {funnyReasons.map((reason, idx) => (
+              <div key={idx} className="bg-black bg-opacity-30 p-4 rounded-xl hover:bg-opacity-50 transition-all">
+                <p className="text-lg">{reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Templates Grid */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Object.entries(templates).map(([lang, template]) => (
+            <div 
+              key={lang}
+              className="bg-white bg-opacity-10 backdrop-blur-lg rounded-2xl p-6 hover:bg-opacity-20 transition-all transform hover:scale-105 cursor-pointer"
+              onClick={() => showDetails(lang)}
+            >
+              <div className="text-6xl mb-4 text-center">{template.emoji}</div>
+              <h3 className="text-2xl font-bold mb-2 text-center">{template.desc}</h3>
+              <p className="text-yellow-300 text-center mb-4 min-h-[60px]">{template.joke}</p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addToCart(lang);
+                  }}
+                  className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+                    cart.includes(lang) 
+                      ? 'bg-green-600' 
+                      : 'bg-purple-600 hover:bg-purple-700'
+                  }`}
+                >
+                  {cart.includes(lang) ? '✓ في السلة' : `⭐${STAR_PRICE}`}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Cart Summary */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-6 right-6 bg-purple-600 rounded-2xl p-6 shadow-2xl max-w-sm">
+          <h3 className="text-xl font-bold mb-3">🛒 سلة المشتريات</h3>
+          <div className="space-y-2 mb-4">
+            {cart.map(lang => (
+              <div key={lang} className="flex items-center gap-2 bg-black bg-opacity-30 p-2 rounded-lg">
+                <span className="text-2xl">{templates[lang].emoji}</span>
+                <span className="flex-1">{templates[lang].name}</span>
+                <button 
+                  onClick={() => setCart(cart.filter(l => l !== lang))}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-white border-opacity-30 pt-3 mb-3">
+            <div className="flex justify-between items-center text-xl font-bold">
+              <span>المجموع:</span>
+              <span className="text-yellow-400">⭐{getTotalPrice()}</span>
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowModal(true)}
+            className="w-full bg-yellow-400 text-black py-3 rounded-xl font-bold hover:bg-yellow-300 transition-all"
+          >
+            <Zap className="inline mr-2" />
+            اشتري الآن!
+          </button>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {currentLang && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={() => setCurrentLang(null)}>
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-6">
+              <div className="text-8xl mb-4">{templates[currentLang].emoji}</div>
+              <h2 className="text-3xl font-bold mb-2">{templates[currentLang].desc}</h2>
+              <p className="text-yellow-300 text-xl">{templates[currentLang].joke}</p>
+            </div>
+            <div className="bg-black rounded-xl p-6 mb-6">
+              <code className="text-green-400 text-sm whitespace-pre-wrap">
+{`// ${templates[currentLang].name}
+// ملف نظيف 100%
+// جاهز للاستخدام!
 
 function main() {
-    // Your code here
+    // اكتب كودك هنا يا فنان! 🎨
 }
 
-main();
-""",
-        "emoji": "💛",
-        "desc": "Clean JavaScript Template"
-    },
-    "java": {
-        "name": "Main.java",
-        "content": """// Java Clean Template
-// Enterprise-ready blank structure
-// Professional starting point
+main();`}
+              </code>
+            </div>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => {
+                  addToCart(currentLang);
+                  setCurrentLang(null);
+                }}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 py-3 rounded-xl font-bold transition-all"
+              >
+                أضف للسلة ⭐{STAR_PRICE}
+              </button>
+              <button 
+                onClick={() => setCurrentLang(null)}
+                className="px-6 bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold transition-all"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-public class Main {
-    public static void main(String[] args) {
-        // Your code here
-    }
-}
-""",
-        "emoji": "☕",
-        "desc": "Clean Java Template"
-    },
-    "cpp": {
-        "name": "main.cpp",
-        "content": """// C++ Clean Template
-// Optimized structure. Zero overhead.
-// Performance-first approach.
+      {/* Purchase Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-green-600 to-blue-600 rounded-2xl p-8 max-w-md w-full text-center">
+            <div className="text-6xl mb-4">🎉</div>
+            <h2 className="text-3xl font-bold mb-4">مبروك!</h2>
+            <p className="text-xl mb-6">
+              اشتريت {cart.length} ملف فاضي بنجاح! 
+              <br />
+              (كان ممكن تعملهم بنفسك بس خلينا نتفائل 😂)
+            </p>
+            <div className="bg-white bg-opacity-20 rounded-xl p-4 mb-6">
+              <p className="text-2xl font-bold mb-2">المجموع المدفوع:</p>
+              <p className="text-4xl font-bold text-yellow-300">⭐{getTotalPrice()}</p>
+            </div>
+            <button 
+              onClick={() => {
+                setShowModal(false);
+                setCart([]);
+              }}
+              className="w-full bg-white text-black py-3 rounded-xl font-bold hover:bg-gray-200 transition-all"
+            >
+              رجوع للصفحة الرئيسية
+            </button>
+            <p className="text-xs mt-4 text-gray-200">
+              * هذا تطبيق تجريبي، لا يوجد دفع حقيقي (للأسف) 💸
+            </p>
+          </div>
+        </div>
+      )}
 
-#include <iostream>
-using namespace std;
+      {/* Footer */}
+      <footer className="bg-black bg-opacity-50 backdrop-blur-md mt-20 py-8">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <p className="text-xl mb-4">
+            💡 <strong>نصيحة الخبراء:</strong> الكود الفاضي أسهل في الصيانة من الكود المليان bugs!
+          </p>
+          <p className="text-sm text-gray-400">
+            © 2025 متجر القوالب النظيفة | كل الحقوق محفوظة (حتى لو الملفات فاضية) 😄
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+};
 
-int main() {
-    // Your code here
-    return 0;
-}
-""",
-        "emoji": "⚡",
-        "desc": "Clean C++ Template"
-    },
-    "csharp": {
-        "name": "Program.cs",
-        "content": """// C# Clean Template
-// .NET ready structure
-// Professional blank slate
-
-using System;
-
-class Program
-{
-    static void Main(string[] args)
-    {
-        // Your code here
-    }
-}
-""",
-        "emoji": "🔷",
-        "desc": "Clean C# Template"
-    },
-    "php": {
-        "name": "index.php",
-        "content": """<?php
-// PHP Clean Template
-// Web-ready blank structure
-// No bloat. Just potential.
-
-function main() {
-    // Your code here
-}
-
-main();
-?>
-""",
-        "emoji": "🐘",
-        "desc": "Clean PHP Template"
-    },
-    "html": {
-        "name": "index.html",
-        "content": """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clean HTML Template</title>
-    <!-- Pure HTML. No frameworks. Full control. -->
-</head>
-<body>
-    <!-- Your content here -->
-</body>
-</html>
-""",
-        "emoji": "🌐",
-        "desc": "Clean HTML Template"
-    },
-    "css": {
-        "name": "style.css",
-        "content": """/* CSS Clean Template */
-/* Zero bloat. Pure styling potential. */
-/* Build your design from scratch. */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-/* Your styles here */
-""",
-        "emoji": "🎨",
-        "desc": "Clean CSS Template"
-    },
-    "go": {
-        "name": "main.go",
-        "content": """// Go Clean Template
-// Minimal structure. Maximum efficiency.
-// Google's simplicity philosophy.
-
-package main
-
-import "fmt"
-
-func main() {
-    // Your code here
-    fmt.Println("Ready to code!")
-}
-""",
-        "emoji": "🔵",
-        "desc": "Clean Go Template"
-    },
-    "rust": {
-        "name": "main.rs",
-        "content": """// Rust Clean Template
-// Memory-safe blank slate
-// Zero-cost abstraction ready
-
-fn main() {
-    // Your code here
-    println!("Ready to build!");
-}
-""",
-        "emoji": "🦀",
-        "desc": "Clean Rust Template"
-    }
-}
-
-# ============================================================================
-# HANDLERS
-# ============================================================================
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    save_user(user.id, user.username)
-    
-    keyboard = [
-        [InlineKeyboardButton(f"📦 Complete Bundle - ⭐{STAR_PRICE * 10} (10 Files)", callback_data="get_all")],
-        [InlineKeyboardButton("📂 Browse Templates", callback_data="show_files")],
-        [InlineKeyboardButton("ℹ️ Why Clean Templates?", callback_data="why_clean")],
-    ]
-    
-    if user.id in ADMIN_IDS:
-        keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data="admin")])
-    
-    await update.message.reply_text(
-        f"🎯 **Clean Code Templates**\n\n"
-        f"✨ **Why programmers love clean templates:**\n"
-        f"• 🚫 Zero bloat - No unnecessary code\n"
-        f"• ⚡ Fast start - Jump right into coding\n"
-        f"• 🎨 Full control - Your project, your way\n"
-        f"• 📝 Professional structure - Industry standard\n"
-        f"• 💎 Perfect blank canvas - Pure potential\n\n"
-        f"🐍 Python • 💛 JavaScript • ☕ Java\n"
-        f"⚡ C++ • 🔷 C# • 🐘 PHP\n"
-        f"🌐 HTML • 🎨 CSS • 🔵 Go • 🦀 Rust\n\n"
-        f"💰 **⭐{STAR_PRICE} per template** | Bundle: ⭐{STAR_PRICE * 10}\n\n"
-        f"🎁 *\"Less is more\" - Start clean, build big!*",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == "get_all":
-        await send_all_invoice(query, context)
-    elif query.data == "show_files":
-        await show_file_list(query)
-    elif query.data == "why_clean":
-        await explain_clean(query)
-    elif query.data == "admin":
-        await show_admin(query)
-    elif query.data == "back":
-        await back_menu(query)
-    elif query.data.startswith("file_"):
-        lang = query.data.replace("file_", "")
-        await send_file_invoice(query, context, lang)
-
-async def send_all_invoice(query, context):
-    try:
-        await context.bot.send_invoice(
-            chat_id=query.message.chat_id,
-            title="📦 Complete Clean Templates Bundle",
-            description="All 10 professionally structured blank templates. Zero bloat, maximum potential!",
-            payload=f"all_{query.from_user.id}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice("Complete Bundle", STAR_PRICE * 10)]
-        )
-        await query.message.edit_text(
-            "💳 **Invoice sent!**\n\n"
-            "You'll receive all 10 clean templates in a ZIP file.\n"
-            "Perfect for starting multiple projects! 🚀"
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await query.message.edit_text("❌ Error creating invoice. Contact support.")
-
-async def show_file_list(query):
-    keyboard = []
-    for lang, info in FILES.items():
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{info['emoji']} {info['desc']} - ⭐{STAR_PRICE}",
-                callback_data=f"file_{lang}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton("« Back to Menu", callback_data="back")])
-    
-    await query.message.edit_text(
-        "📂 **Choose Your Clean Template:**\n\n"
-        "Each template is:\n"
-        "✨ Professionally structured\n"
-        "🚫 100% bloat-free\n"
-        "⚡ Ready to use instantly\n"
-        "💎 Perfect blank canvas\n\n"
-        f"💰 Only ⭐{STAR_PRICE} stars each!",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def send_file_invoice(query, context, lang):
-    if lang not in FILES:
-        return
-    
-    file = FILES[lang]
-    try:
-        await context.bot.send_invoice(
-            chat_id=query.message.chat_id,
-            title=f"{file['emoji']} {file['desc']}",
-            description="Clean, professional template. Zero bloat. Full potential.",
-            payload=f"file_{lang}_{query.from_user.id}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice(file['desc'], STAR_PRICE)]
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await query.message.reply_text("❌ Error creating invoice.")
-
-async def explain_clean(query):
-    await query.message.edit_text(
-        "🎯 **Why Clean Templates Are Better:**\n\n"
-        "**Traditional templates:**\n"
-        "❌ Full of example code you'll delete\n"
-        "❌ Bloated with unused features\n"
-        "❌ Waste time removing stuff\n"
-        "❌ Confusing for beginners\n\n"
-        "**Our clean templates:**\n"
-        "✅ **100% empty and clean**\n"
-        "✅ **Professional structure only**\n"
-        "✅ **Start coding immediately**\n"
-        "✅ **Your code, your rules**\n"
-        "✅ **No distractions**\n\n"
-        "💡 *\"The best code is code you write yourself!\"*\n\n"
-        "🎨 Think of it as a blank canvas for artists.\n"
-        "That's what these templates are for coders!",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("« Back to Menu", callback_data="back")
-        ]])
-    )
-
-async def show_admin(query):
-    if query.from_user.id not in ADMIN_IDS:
-        await query.answer("❌ Access denied!", show_alert=True)
-        return
-    
-    if Session:
-        try:
-            session = Session()
-            total_users = session.query(User).count()
-            total_purchases = session.query(Purchase).count()
-            total_revenue = session.query(Purchase).with_entities(
-                Purchase.stars_paid
-            ).all()
-            revenue_sum = sum([p[0] for p in total_revenue]) if total_revenue else 0
-            session.close()
-            
-            await query.message.edit_text(
-                f"👑 **Admin Dashboard**\n\n"
-                f"👥 Total Users: {total_users}\n"
-                f"🛒 Total Sales: {total_purchases}\n"
-                f"💰 Revenue: ⭐{revenue_sum} stars\n"
-                f"📊 Avg per sale: ⭐{revenue_sum//total_purchases if total_purchases > 0 else 0}",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("« Back", callback_data="back")
-                ]])
-            )
-        except Exception as e:
-            await query.message.edit_text(f"Error: {e}")
-
-async def back_menu(query):
-    keyboard = [
-        [InlineKeyboardButton(f"📦 Complete Bundle - ⭐{STAR_PRICE * 10}", callback_data="get_all")],
-        [InlineKeyboardButton("📂 Browse Templates", callback_data="show_files")],
-        [InlineKeyboardButton("ℹ️ Why Clean Templates?", callback_data="why_clean")],
-    ]
-    
-    if query.from_user.id in ADMIN_IDS:
-        keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data="admin")])
-    
-    await query.message.edit_text(
-        f"🎯 **Clean Code Templates**\n\n"
-        f"The power of simplicity!\n\n"
-        f"💰 ⭐{STAR_PRICE} per template | Bundle: ⭐{STAR_PRICE * 10}",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# ============================================================================
-# PAYMENT
-# ============================================================================
-
-async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.pre_checkout_query.answer(ok=True)
-
-async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    payment = update.message.successful_payment
-    user_id = update.effective_user.id
-    payload = payment.invoice_payload
-    
-    try:
-        if "all_" in payload:
-            # Send ZIP with all files
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w') as zf:
-                for f in FILES.values():
-                    zf.writestr(f['name'], f['content'])
-                # Add README
-                readme = """🎯 CLEAN CODE TEMPLATES
-                
-✨ Congratulations! You now have 10 professional blank templates.
-
-🚫 NO BLOAT - Pure, clean structure
-⚡ FAST START - Jump right into coding
-🎨 FULL CONTROL - Your project, your way
-
-Each file is perfectly structured and ready for your code!
-
-Happy coding! 🚀
-"""
-                zf.writestr("README.txt", readme)
-            
-            zip_buffer.seek(0)
-            
-            await context.bot.send_document(
-                chat_id=user_id,
-                document=zip_buffer,
-                filename="clean_templates_bundle.zip",
-                caption=(
-                    "✅ **Payment Successful!**\n\n"
-                    "📦 Your complete clean templates bundle!\n\n"
-                    "🎨 10 perfectly structured templates\n"
-                    "🚫 Zero bloat - Pure potential\n"
-                    "⚡ Start building amazing projects now!\n\n"
-                    "🎁 Thank you for choosing quality! 🚀"
-                ),
-                parse_mode="Markdown"
-            )
-            
-            save_purchase(user_id, "bundle.zip", STAR_PRICE * 10)
-            
-        elif "file_" in payload:
-            lang = payload.split("_")[1]
-            if lang in FILES:
-                file = FILES[lang]
-                file_buffer = io.BytesIO(file['content'].encode('utf-8'))
-                
-                await context.bot.send_document(
-                    chat_id=user_id,
-                    document=file_buffer,
-                    filename=file['name'],
-                    caption=(
-                        f"✅ **Payment Successful!**\n\n"
-                        f"{file['emoji']} Your clean {file['desc']} is ready!\n\n"
-                        f"🚫 Zero bloat\n"
-                        f"⚡ Professional structure\n"
-                        f"🎨 Perfect blank canvas\n\n"
-                        f"Start coding now! 🚀"
-                    ),
-                    parse_mode="Markdown"
-                )
-                
-                save_purchase(user_id, file['name'], STAR_PRICE)
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ Error. Contact support.")
-
-# ============================================================================
-# MAIN
-# ============================================================================
-
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(PreCheckoutQueryHandler(precheckout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
-    
-    logger.info("🚀 Clean Code Templates Bot started!")
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
+export default CleanTemplatesStore;
