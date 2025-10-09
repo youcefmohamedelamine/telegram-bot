@@ -15,9 +15,9 @@ from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/botdb")
-WEB_APP_URL = os.getenv("WEB_APP_URL", "https://your-webapp-url.com")
+# رابط موقعك على GitHub Pages (غيّر هذا للرابط الصحيح)
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://your-username.github.io/your-repo")
 STAR_PRICE = 999
-ADMIN_IDS = [123456789]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -255,41 +255,30 @@ fn main() {
 # ============================================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """رسالة البداية مع زر فتح التطبيق فقط"""
     user = update.effective_user
     save_user(user.id, user.username)
     
     keyboard = [
-        [InlineKeyboardButton("🌐 فتح التطبيق", web_app=WebAppInfo(url=WEB_APP_URL))],
-        [InlineKeyboardButton(f"📦 Complete Bundle - ⭐{STAR_PRICE * 10} (10 Files)", callback_data="get_all")],
-        [InlineKeyboardButton("📂 Browse Templates", callback_data="show_files")],
-        [InlineKeyboardButton("ℹ️ Why Clean Templates?", callback_data="why_clean")],
+        [InlineKeyboardButton("🚀 فتح المتجر", web_app=WebAppInfo(url=WEB_APP_URL))]
     ]
     
-    if user.id in ADMIN_IDS:
-        keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data="admin")])
-    
     await update.message.reply_text(
-        f"🎯 **Clean Code Templates**\n\n"
-        f"✨ **Why programmers love clean templates:**\n"
-        f"• 🚫 Zero bloat - No unnecessary code\n"
-        f"• ⚡ Fast start - Jump right into coding\n"
-        f"• 🎨 Full control - Your project, your way\n"
-        f"• 📝 Professional structure - Industry standard\n"
-        f"• 💎 Perfect blank canvas - Pure potential\n\n"
+        f"🎯 **مرحباً {user.first_name}!**\n\n"
+        f"✨ **Clean Code Templates**\n\n"
         f"🐍 Python • 💛 JavaScript • ☕ Java\n"
         f"⚡ C++ • 🔷 C# • 🐘 PHP\n"
         f"🌐 HTML • 🎨 CSS • 🔵 Go • 🦀 Rust\n\n"
-        f"💰 **⭐{STAR_PRICE} per template** | Bundle: ⭐{STAR_PRICE * 10}\n\n"
-        f"🎁 *\"Less is more\" - Start clean, build big!*",
+        f"💰 **⭐{STAR_PRICE} نجمة للقالب الواحد**\n"
+        f"📦 **⭐{STAR_PRICE * 10} نجمة للحزمة الكاملة**\n\n"
+        f"اضغط الزر أدناه لفتح المتجر 👇",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# معالج بيانات Web App (مُصلح)
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة البيانات المرسلة من Web App"""
     try:
-        # التصحيح: استخدام update.message بدلاً من update.effective_message
         data = json.loads(update.message.web_app_data.data)
         logger.info(f"Received web app data: {data}")
         
@@ -325,159 +314,6 @@ async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Error handling web app data: {e}")
         await update.message.reply_text("❌ حدث خطأ. حاول مرة أخرى.")
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == "get_all":
-        await send_all_invoice(query, context)
-    elif query.data == "show_files":
-        await show_file_list(query)
-    elif query.data == "why_clean":
-        await explain_clean(query)
-    elif query.data == "admin":
-        await show_admin(query)
-    elif query.data == "back":
-        await back_menu(query)
-    elif query.data.startswith("file_"):
-        lang = query.data.replace("file_", "")
-        await send_file_invoice(query, context, lang)
-
-async def send_all_invoice(query, context):
-    try:
-        await context.bot.send_invoice(
-            chat_id=query.message.chat_id,
-            title="📦 Complete Clean Templates Bundle",
-            description="All 10 professionally structured blank templates. Zero bloat, maximum potential!",
-            payload=f"all_{query.from_user.id}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice("Complete Bundle", STAR_PRICE * 10)]
-        )
-        await query.message.edit_text(
-            "💳 **Invoice sent!**\n\n"
-            "You'll receive all 10 clean templates in a ZIP file.\n"
-            "Perfect for starting multiple projects! 🚀",
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await query.message.edit_text("❌ Error creating invoice. Contact support.")
-
-async def show_file_list(query):
-    keyboard = []
-    for lang, info in FILES.items():
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{info['emoji']} {info['desc']} - ⭐{STAR_PRICE}",
-                callback_data=f"file_{lang}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton("« Back to Menu", callback_data="back")])
-    
-    await query.message.edit_text(
-        "📂 **Choose Your Clean Template:**\n\n"
-        "Each template is:\n"
-        "✨ Professionally structured\n"
-        "🚫 100% bloat-free\n"
-        "⚡ Ready to use instantly\n"
-        "💎 Perfect blank canvas\n\n"
-        f"💰 Only ⭐{STAR_PRICE} stars each!",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def send_file_invoice(query, context, lang):
-    if lang not in FILES:
-        return
-    
-    file = FILES[lang]
-    try:
-        await context.bot.send_invoice(
-            chat_id=query.message.chat_id,
-            title=f"{file['emoji']} {file['desc']}",
-            description="Clean, professional template. Zero bloat. Full potential.",
-            payload=f"file_{lang}_{query.from_user.id}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice(file['desc'], STAR_PRICE)]
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await query.message.reply_text("❌ Error creating invoice.")
-
-async def explain_clean(query):
-    await query.message.edit_text(
-        "🎯 **Why Clean Templates Are Better:**\n\n"
-        "**Traditional templates:**\n"
-        "❌ Full of example code you'll delete\n"
-        "❌ Bloated with unused features\n"
-        "❌ Waste time removing stuff\n"
-        "❌ Confusing for beginners\n\n"
-        "**Our clean templates:**\n"
-        "✅ **100% empty and clean**\n"
-        "✅ **Professional structure only**\n"
-        "✅ **Start coding immediately**\n"
-        "✅ **Your code, your rules**\n"
-        "✅ **No distractions**\n\n"
-        "💡 *\"The best code is code you write yourself!\"*\n\n"
-        "🎨 Think of it as a blank canvas for artists.\n"
-        "That's what these templates are for coders!",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("« Back to Menu", callback_data="back")
-        ]])
-    )
-
-async def show_admin(query):
-    if query.from_user.id not in ADMIN_IDS:
-        await query.answer("❌ Access denied!", show_alert=True)
-        return
-    
-    if Session:
-        try:
-            session = Session()
-            total_users = session.query(User).count()
-            total_purchases = session.query(Purchase).count()
-            total_revenue = session.query(Purchase).with_entities(
-                Purchase.stars_paid
-            ).all()
-            revenue_sum = sum([p[0] for p in total_revenue]) if total_revenue else 0
-            session.close()
-            
-            await query.message.edit_text(
-                f"👑 **Admin Dashboard**\n\n"
-                f"👥 Total Users: {total_users}\n"
-                f"🛒 Total Sales: {total_purchases}\n"
-                f"💰 Revenue: ⭐{revenue_sum} stars\n"
-                f"📊 Avg per sale: ⭐{revenue_sum//total_purchases if total_purchases > 0 else 0}",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("« Back", callback_data="back")
-                ]])
-            )
-        except Exception as e:
-            await query.message.edit_text(f"Error: {e}")
-
-async def back_menu(query):
-    keyboard = [
-        [InlineKeyboardButton("🌐 فتح التطبيق", web_app=WebAppInfo(url=WEB_APP_URL))],
-        [InlineKeyboardButton(f"📦 Complete Bundle - ⭐{STAR_PRICE * 10}", callback_data="get_all")],
-        [InlineKeyboardButton("📂 Browse Templates", callback_data="show_files")],
-        [InlineKeyboardButton("ℹ️ Why Clean Templates?", callback_data="why_clean")],
-    ]
-    
-    if query.from_user.id in ADMIN_IDS:
-        keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data="admin")])
-    
-    await query.message.edit_text(
-        f"🎯 **Clean Code Templates**\n\n"
-        f"The power of simplicity!\n\n"
-        f"💰 ⭐{STAR_PRICE} per template | Bundle: ⭐{STAR_PRICE * 10}",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
 # ============================================================================
 # PAYMENT
 # ============================================================================
@@ -492,23 +328,23 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     try:
         if "all_" in payload:
-            # Send ZIP with all files
+            # إرسال ZIP مع جميع الملفات
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, 'w') as zf:
                 for f in FILES.values():
                     zf.writestr(f['name'], f['content'])
-                # Add README
+                # إضافة README
                 readme = """🎯 CLEAN CODE TEMPLATES
-                
-✨ Congratulations! You now have 10 professional blank templates.
 
-🚫 NO BLOAT - Pure, clean structure
-⚡ FAST START - Jump right into coding
-🎨 FULL CONTROL - Your project, your way
+✨ تهانينا! لديك الآن 10 قوالب احترافية نظيفة.
 
-Each file is perfectly structured and ready for your code!
+🚫 بدون زوائد - هيكلة نظيفة تماماً
+⚡ بداية سريعة - ابدأ البرمجة فوراً
+🎨 تحكم كامل - مشروعك بطريقتك
 
-Happy coding! 🚀
+كل ملف مهيكل بشكل مثالي وجاهز لكودك!
+
+برمجة سعيدة! 🚀
 """
                 zf.writestr("README.txt", readme)
             
@@ -519,12 +355,12 @@ Happy coding! 🚀
                 document=zip_buffer,
                 filename="clean_templates_bundle.zip",
                 caption=(
-                    "✅ **Payment Successful!**\n\n"
-                    "📦 Your complete clean templates bundle!\n\n"
-                    "🎨 10 perfectly structured templates\n"
-                    "🚫 Zero bloat - Pure potential\n"
-                    "⚡ Start building amazing projects now!\n\n"
-                    "🎁 Thank you for choosing quality! 🚀"
+                    "✅ **تم الدفع بنجاح!**\n\n"
+                    "📦 حزمة القوالب النظيفة الكاملة!\n\n"
+                    "🎨 10 قوالب مهيكلة بشكل مثالي\n"
+                    "🚫 بدون زوائد - إمكانيات نقية\n"
+                    "⚡ ابدأ ببناء مشاريع رائعة الآن!\n\n"
+                    "🎁 شكراً لاختيارك الجودة! 🚀"
                 ),
                 parse_mode="Markdown"
             )
@@ -542,12 +378,12 @@ Happy coding! 🚀
                     document=file_buffer,
                     filename=file['name'],
                     caption=(
-                        f"✅ **Payment Successful!**\n\n"
-                        f"{file['emoji']} Your clean {file['desc']} is ready!\n\n"
-                        f"🚫 Zero bloat\n"
-                        f"⚡ Professional structure\n"
-                        f"🎨 Perfect blank canvas\n\n"
-                        f"Start coding now! 🚀"
+                        f"✅ **تم الدفع بنجاح!**\n\n"
+                        f"{file['emoji']} قالب {file['desc']} جاهز!\n\n"
+                        f"🚫 بدون زوائد\n"
+                        f"⚡ هيكلة احترافية\n"
+                        f"🎨 لوحة فارغة مثالية\n\n"
+                        f"ابدأ البرمجة الآن! 🚀"
                     ),
                     parse_mode="Markdown"
                 )
@@ -556,7 +392,7 @@ Happy coding! 🚀
         
     except Exception as e:
         logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ Error. Contact support.")
+        await update.message.reply_text("❌ خطأ. تواصل مع الدعم.")
 
 # ============================================================================
 # MAIN
@@ -568,11 +404,8 @@ def main():
     # Command handlers
     app.add_handler(CommandHandler("start", start))
     
-    # Web App data handler - مُصلح!
+    # Web App data handler
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
-    
-    # Callback query handler
-    app.add_handler(CallbackQueryHandler(button_handler))
     
     # Payment handlers
     app.add_handler(PreCheckoutQueryHandler(precheckout))
