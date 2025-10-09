@@ -2,11 +2,13 @@ import logging
 import os
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request, jsonify
 import threading
+import json
+from database import db
 
 # إعدادات البوت
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")  # ضع توكن البوت هنا
+BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://winterlandbot-production.up.railway.app")
 PORT = int(os.getenv("PORT", 5000))
 
@@ -123,19 +125,6 @@ HTML_TEMPLATE = """
         @keyframes pulse {
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.05); }
-        }
-
-        .coin-icon {
-            font-size: 80px;
-            margin: 30px 0;
-            cursor: pointer;
-            transition: transform 0.1s;
-            user-select: none;
-            filter: drop-shadow(0 10px 20px rgba(255, 215, 0, 0.5));
-        }
-
-        .coin-icon:active {
-            transform: scale(0.9);
         }
 
         .tap-button {
@@ -302,6 +291,8 @@ HTML_TEMPLATE = """
         let maxEnergy = 1000;
         let level = 1;
         let tapPower = 1;
+        let userId = null;
+        let saveInterval = null;
 
         // تهيئة Telegram WebApp
         let tg = window.Telegram.WebApp;
@@ -311,14 +302,55 @@ HTML_TEMPLATE = """
         // الحصول على معلومات المستخدم
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
             let user = tg.initDataUnsafe.user;
+            userId = user.id;
             document.getElementById('username').textContent = user.first_name || 'مستخدم';
             if (user.first_name) {
                 document.getElementById('avatar').textContent = user.first_name.charAt(0).toUpperCase();
             }
+            
+            // تحميل البيانات من الخادم
+            loadDataFromServer();
         }
 
-        // تحميل البيانات المحفوظة
-        loadData();
+        // تحميل البيانات من الخادم
+        async function loadDataFromServer() {
+            try {
+                const response = await fetch('/api/user/' + userId);
+                if (response.ok) {
+                    const data = await response.json();
+                    balance = data.balance || 0;
+                    tapsToday = data.taps_today || 0;
+                    energy = data.energy || 1000;
+                    level = data.level || 1;
+                    tapPower = data.tap_power || 1;
+                    updateDisplay();
+                }
+            } catch (error) {
+                console.error('خطأ في تحميل البيانات:', error);
+            }
+        }
+
+        // حفظ البيانات على الخادم
+        async function saveDataToServer() {
+            if (!userId) return;
+            
+            try {
+                await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: userId,
+                        balance: balance,
+                        taps_today: tapsToday,
+                        energy: energy,
+                        level: level,
+                        tap_power: tapPower
+                    })
+                });
+            } catch (error) {
+                console.error('خطأ في حفظ البيانات:', error);
+            }
+        }
 
         function tap() {
             if (energy < tapPower) {
@@ -332,7 +364,6 @@ HTML_TEMPLATE = """
 
             updateDisplay();
             createFloatingCoin(event);
-            saveData();
 
             // ترقية المستوى
             if (balance >= level * 100) {
@@ -374,27 +405,18 @@ HTML_TEMPLATE = """
             if (energy < maxEnergy) {
                 energy = Math.min(energy + 1, maxEnergy);
                 updateDisplay();
-                saveData();
             }
         }, 1000);
 
-        function saveData() {
-            let data = { balance, tapsToday, energy, level, tapPower };
-            localStorage.setItem('gameData', JSON.stringify(data));
-        }
+        // حفظ البيانات كل 5 ثواني
+        setInterval(() => {
+            saveDataToServer();
+        }, 5000);
 
-        function loadData() {
-            let saved = localStorage.getItem('gameData');
-            if (saved) {
-                let data = JSON.parse(saved);
-                balance = data.balance || 0;
-                tapsToday = data.tapsToday || 0;
-                energy = data.energy || 1000;
-                level = data.level || 1;
-                tapPower = data.tapPower || 1;
-                updateDisplay();
-            }
-        }
+        // حفظ عند إغلاق الصفحة
+        window.addEventListener('beforeunload', () => {
+            saveDataToServer();
+        });
 
         function showTasks() {
             tg.showPopup({
@@ -425,23 +447,72 @@ HTML_TEMPLATE = """
 def webapp():
     return render_template_string(HTML_TEMPLATE)
 
+@app.route('/api/user/<int:user_id>')
+def get_user_data(user_id):
+    """API للحصول على بيانات المستخدم"""
+    user = db.get_user(user_id)
+    if user:
+        return jsonify(user)
+    return jsonify({'error': 'User not found'}), 404
+
+@app.route('/api/save', methods=['POST'])
+def save_game_data():
+    """API لحفظ بيانات اللعبة"""
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        
+        db.update_game_data(
+            user_id=user_id,
+            balance=data.get('balance'),
+            taps_today=data.get('taps_today'),
+            energy=data.get('energy'),
+            level=data.get('level'),
+            tap_power=data.get('tap_power')
+        )
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"خطأ في حفظ البيانات: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/leaderboard')
+def leaderboard():
+    """API للحصول على المتصدرين"""
+    leaders = db.get_leaderboard(limit=10)
+    return jsonify(leaders)
+
 # دوال البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """رسالة الترحيب مع زر فتح التطبيق"""
+    user = update.effective_user
+    
+    # حفظ/تحديث بيانات المستخدم في قاعدة البيانات
+    invited_by = context.args[0] if context.args else None
+    db.create_or_update_user(
+        user_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        invited_by=invited_by
+    )
+    
     keyboard = [
         [InlineKeyboardButton("🎮 العب الآن", web_app=WebAppInfo(url=WEBAPP_URL))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_message = (
-        f"🎉 مرحباً {update.effective_user.first_name}!\n\n"
+        f"🎉 مرحباً {user.first_name}!\n\n"
         "🪙 اجمع العملات واحصل على مكافآت رائعة!\n"
         "💎 انقر على الزر أدناه لبدء اللعب\n\n"
         "📊 المميزات:\n"
         "• نقرات غير محدودة\n"
         "• نظام المستويات\n"
         "• مهام يومية\n"
-        "• دعوة الأصدقاء"
+        "• دعوة الأصدقاء\n\n"
+        f"🔗 رابط الدعوة الخاص بك:\n"
+        f"https://t.me/YOUR_BOT_USERNAME?start={user.id}"
     )
     
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
@@ -460,12 +531,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """عرض إحصائيات اللاعب"""
-    stats_text = (
-        f"📊 إحصائياتك:\n\n"
-        f"👤 الاسم: {update.effective_user.first_name}\n"
-        f"🆔 المعرف: {update.effective_user.id}\n\n"
-        "افتح اللعبة لمشاهدة رصيدك الكامل! 🎮"
-    )
+    user = update.effective_user
+    user_data = db.get_user(user.id)
+    
+    if user_data:
+        stats_text = (
+            f"📊 إحصائياتك:\n\n"
+            f"👤 الاسم: {user.first_name}\n"
+            f"🆔 المعرف: {user.id}\n"
+            f"💎 الرصيد: {user_data['balance']:,}\n"
+            f"⭐ المستوى: {user_data['level']}\n"
+            f"👥 عدد الأصدقاء: {user_data['invited_count']}\n"
+            f"📅 انضممت: {user_data['created_at'].strftime('%Y-%m-%d')}"
+        )
+    else:
+        stats_text = (
+            f"📊 إحصائياتك:\n\n"
+            f"👤 الاسم: {user.first_name}\n"
+            f"🆔 المعرف: {user.id}\n\n"
+            "افتح اللعبة لمشاهدة رصيدك الكامل! 🎮"
+        )
     
     keyboard = [
         [InlineKeyboardButton("🎮 افتح اللعبة", web_app=WebAppInfo(url=WEBAPP_URL))]
@@ -473,6 +558,87 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(stats_text, reply_markup=reply_markup)
+
+async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض قائمة المتصدرين"""
+    leaders = db.get_leaderboard(limit=10)
+    
+    if not leaders:
+        await update.message.reply_text("📊 لا يوجد متصدرين حتى الآن!")
+        return
+    
+    leaderboard_text = "🏆 قائمة المتصدرين:\n\n"
+    
+    medals = ["🥇", "🥈", "🥉"]
+    for idx, leader in enumerate(leaders):
+        medal = medals[idx] if idx < 3 else f"{idx + 1}."
+        name = leader['first_name'] or leader['username'] or 'لاعب'
+        leaderboard_text += f"{medal} {name}\n"
+        leaderboard_text += f"   💎 {leader['balance']:,} | ⭐ المستوى {leader['level']}\n\n"
+    
+    await update.message.reply_text(leaderboard_text)
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إحصائيات للمشرفين (ضع معرف المشرف هنا)"""
+    ADMIN_IDS = [123456789]  # ضع معرفك هنا
+    
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ هذا الأمر للمشرفين فقط!")
+        return
+    
+    total_users = db.get_user_count()
+    all_users = db.get_all_users()
+    
+    total_balance = sum(user['balance'] for user in all_users)
+    active_today = sum(1 for user in all_users 
+                      if user['last_active'].date() == datetime.now().date())
+    
+    stats_text = (
+        "👑 إحصائيات المشرف:\n\n"
+        f"👥 إجمالي المستخدمين: {total_users}\n"
+        f"✅ نشط اليوم: {active_today}\n"
+        f"💎 إجمالي العملات: {total_balance:,}\n"
+    )
+    
+    await update.message.reply_text(stats_text)
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إرسال رسالة جماعية (للمشرفين فقط)"""
+    ADMIN_IDS = [123456789]  # ضع معرفك هنا
+    
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ هذا الأمر للمشرفين فقط!")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "📢 استخدم: /broadcast <الرسالة>\n"
+            "مثال: /broadcast مرحباً بالجميع!"
+        )
+        return
+    
+    message = ' '.join(context.args)
+    all_users = db.get_all_users()
+    
+    success = 0
+    failed = 0
+    
+    for user in all_users:
+        try:
+            await context.bot.send_message(
+                chat_id=user['user_id'],
+                text=f"📢 رسالة من الإدارة:\n\n{message}"
+            )
+            success += 1
+        except Exception as e:
+            failed += 1
+            logger.error(f"فشل إرسال الرسالة إلى {user['user_id']}: {e}")
+    
+    await update.message.reply_text(
+        f"✅ تم إرسال الرسالة\n\n"
+        f"نجح: {success}\n"
+        f"فشل: {failed}"
+    )
 
 def run_flask():
     """تشغيل خادم Flask"""
@@ -491,9 +657,13 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    application.add_handler(CommandHandler("admin", admin_stats))
+    application.add_handler(CommandHandler("broadcast", broadcast))
     
     # بدء البوت
     logger.info("🚀 البوت يعمل الآن...")
+    logger.info(f"📊 عدد المستخدمين في قاعدة البيانات: {db.get_user_count()}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
