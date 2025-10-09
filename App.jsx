@@ -22,13 +22,11 @@ export default function TelegramWebApp() {
   const [userInfo, setUserInfo] = useState(null);
 
   useEffect(() => {
-    // التحقق من وجود Telegram WebApp API
     if (window.Telegram && window.Telegram.WebApp) {
       const telegram = window.Telegram.WebApp;
       telegram.ready();
       telegram.expand();
       
-      // تخصيص الألوان
       try {
         telegram.setHeaderColor('#1e1b4b');
         telegram.setBackgroundColor('#0f172a');
@@ -38,27 +36,25 @@ export default function TelegramWebApp() {
       
       setTg(telegram);
       
-      // الحصول على معلومات المستخدم
       if (telegram.initDataUnsafe && telegram.initDataUnsafe.user) {
         setUserInfo(telegram.initDataUnsafe.user);
       }
     }
   }, []);
 
+  // الطريقة المُصلحة للشراء
   const handlePurchase = (type, item = null) => {
-    const price = type === 'bundle' ? STAR_PRICE * 10 : STAR_PRICE;
-    
     if (tg && tg.sendData) {
-      // إرسال البيانات للبوت
+      // إرسال البيانات للبوت - سيُغلق WebApp تلقائياً
       tg.sendData(JSON.stringify({
         action: 'purchase',
         type: type,
-        item: item,
-        price: price
+        item: item
       }));
     } else {
       // للتجربة خارج Telegram
-      alert(`🔔 طلب الشراء:\n\nالنوع: ${type === 'bundle' ? 'حزمة كاملة' : 'قالب واحد'}\nالسعر: ⭐${price} نجمة`);
+      const price = type === 'bundle' ? STAR_PRICE * 10 : STAR_PRICE;
+      alert(`🔔 طلب الشراء:\n\nالنوع: ${type === 'bundle' ? 'حزمة كاملة' : 'قالب واحد'}\nالقالب: ${item || 'الكل'}\nالسعر: ⭐${price} نجمة`);
     }
   };
 
@@ -122,7 +118,7 @@ export default function TelegramWebApp() {
             </div>
             <div className="text-left">
               <div className="text-2xl font-bold">⭐{STAR_PRICE * 10}</div>
-              <p className="text-sm text-yellow-100 line-through">⭐{STAR_PRICE * 10 * 1.4}</p>
+              <p className="text-sm text-yellow-100 line-through">⭐{Math.round(STAR_PRICE * 10 * 1.4)}</p>
             </div>
           </div>
         </button>
