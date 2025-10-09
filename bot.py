@@ -15,7 +15,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/botdb")
-WEB_APP_URL = os.getenv("WEB_APP_URL", "https://your-webapp-url.com")  # ضع رابط موقعك هنا
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://your-webapp-url.com")
 STAR_PRICE = 999
 ADMIN_IDS = [123456789]
 
@@ -285,59 +285,45 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# معالج بيانات Web App
+# معالج بيانات Web App (مُصلح)
 async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة البيانات المرسلة من Web App"""
     try:
-        data = json.loads(update.effective_message.web_app_data.data)
+        # التصحيح: استخدام update.message بدلاً من update.effective_message
+        data = json.loads(update.message.web_app_data.data)
         logger.info(f"Received web app data: {data}")
+        
+        user_id = update.effective_user.id
         
         if data.get('action') == 'purchase':
             if data.get('type') == 'bundle':
-                await send_all_invoice_direct(update, context)
+                # إرسال فاتورة الحزمة
+                await context.bot.send_invoice(
+                    chat_id=user_id,
+                    title="📦 Complete Clean Templates Bundle",
+                    description="All 10 professionally structured blank templates. Zero bloat, maximum potential!",
+                    payload=f"all_{user_id}",
+                    provider_token="",
+                    currency="XTR",
+                    prices=[LabeledPrice("Complete Bundle", STAR_PRICE * 10)]
+                )
             elif data.get('type') == 'single':
                 lang = data.get('item')
-                if lang:
-                    await send_file_invoice_direct(update, context, lang)
+                if lang and lang in FILES:
+                    file = FILES[lang]
+                    # إرسال فاتورة قالب واحد
+                    await context.bot.send_invoice(
+                        chat_id=user_id,
+                        title=f"{file['emoji']} {file['desc']}",
+                        description="Clean, professional template. Zero bloat. Full potential.",
+                        payload=f"file_{lang}_{user_id}",
+                        provider_token="",
+                        currency="XTR",
+                        prices=[LabeledPrice(file['desc'], STAR_PRICE)]
+                    )
     except Exception as e:
         logger.error(f"Error handling web app data: {e}")
         await update.message.reply_text("❌ حدث خطأ. حاول مرة أخرى.")
-
-async def send_all_invoice_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إرسال فاتورة الحزمة الكاملة مباشرة"""
-    try:
-        await context.bot.send_invoice(
-            chat_id=update.effective_chat.id,
-            title="📦 Complete Clean Templates Bundle",
-            description="All 10 professionally structured blank templates. Zero bloat, maximum potential!",
-            payload=f"all_{update.effective_user.id}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice("Complete Bundle", STAR_PRICE * 10)]
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ Error creating invoice.")
-
-async def send_file_invoice_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
-    """إرسال فاتورة قالب واحد مباشرة"""
-    if lang not in FILES:
-        return
-    
-    file = FILES[lang]
-    try:
-        await context.bot.send_invoice(
-            chat_id=update.effective_chat.id,
-            title=f"{file['emoji']} {file['desc']}",
-            description="Clean, professional template. Zero bloat. Full potential.",
-            payload=f"file_{lang}_{update.effective_user.id}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice(file['desc'], STAR_PRICE)]
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ Error creating invoice.")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -371,7 +357,8 @@ async def send_all_invoice(query, context):
         await query.message.edit_text(
             "💳 **Invoice sent!**\n\n"
             "You'll receive all 10 clean templates in a ZIP file.\n"
-            "Perfect for starting multiple projects! 🚀"
+            "Perfect for starting multiple projects! 🚀",
+            parse_mode="Markdown"
         )
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -581,7 +568,7 @@ def main():
     # Command handlers
     app.add_handler(CommandHandler("start", start))
     
-    # Web App data handler - مهم جداً!
+    # Web App data handler - مُصلح!
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
     
     # Callback query handler
