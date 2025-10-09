@@ -2,8 +2,9 @@ import logging
 import io
 import zipfile
 import os
+import json
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, PreCheckoutQueryHandler, MessageHandler, filters
 from sqlalchemy import create_engine, Column, BigInteger, String, Integer, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
@@ -14,6 +15,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7580086418:AAGi6mVgzONAl1koEbXfk13eDYTzCeMdDWg")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/botdb")
+WEB_APP_URL = os.getenv("WEB_APP_URL", "https://your-webapp-url.com")  # ضع رابط موقعك هنا
 STAR_PRICE = 999
 ADMIN_IDS = [123456789]
 
@@ -77,7 +79,7 @@ def save_purchase(user_id, file_name, stars):
         pass
 
 # ============================================================================
-# CLEAN FILES - القوة في البساطة!
+# CLEAN FILES
 # ============================================================================
 
 FILES = {
@@ -257,6 +259,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(user.id, user.username)
     
     keyboard = [
+        [InlineKeyboardButton("🌐 فتح التطبيق", web_app=WebAppInfo(url=WEB_APP_URL))],
         [InlineKeyboardButton(f"📦 Complete Bundle - ⭐{STAR_PRICE * 10} (10 Files)", callback_data="get_all")],
         [InlineKeyboardButton("📂 Browse Templates", callback_data="show_files")],
         [InlineKeyboardButton("ℹ️ Why Clean Templates?", callback_data="why_clean")],
@@ -281,6 +284,60 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+# معالج بيانات Web App
+async def handle_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة البيانات المرسلة من Web App"""
+    try:
+        data = json.loads(update.effective_message.web_app_data.data)
+        logger.info(f"Received web app data: {data}")
+        
+        if data.get('action') == 'purchase':
+            if data.get('type') == 'bundle':
+                await send_all_invoice_direct(update, context)
+            elif data.get('type') == 'single':
+                lang = data.get('item')
+                if lang:
+                    await send_file_invoice_direct(update, context, lang)
+    except Exception as e:
+        logger.error(f"Error handling web app data: {e}")
+        await update.message.reply_text("❌ حدث خطأ. حاول مرة أخرى.")
+
+async def send_all_invoice_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إرسال فاتورة الحزمة الكاملة مباشرة"""
+    try:
+        await context.bot.send_invoice(
+            chat_id=update.effective_chat.id,
+            title="📦 Complete Clean Templates Bundle",
+            description="All 10 professionally structured blank templates. Zero bloat, maximum potential!",
+            payload=f"all_{update.effective_user.id}",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice("Complete Bundle", STAR_PRICE * 10)]
+        )
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        await update.message.reply_text("❌ Error creating invoice.")
+
+async def send_file_invoice_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str):
+    """إرسال فاتورة قالب واحد مباشرة"""
+    if lang not in FILES:
+        return
+    
+    file = FILES[lang]
+    try:
+        await context.bot.send_invoice(
+            chat_id=update.effective_chat.id,
+            title=f"{file['emoji']} {file['desc']}",
+            description="Clean, professional template. Zero bloat. Full potential.",
+            payload=f"file_{lang}_{update.effective_user.id}",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(file['desc'], STAR_PRICE)]
+        )
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        await update.message.reply_text("❌ Error creating invoice.")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -417,6 +474,7 @@ async def show_admin(query):
 
 async def back_menu(query):
     keyboard = [
+        [InlineKeyboardButton("🌐 فتح التطبيق", web_app=WebAppInfo(url=WEB_APP_URL))],
         [InlineKeyboardButton(f"📦 Complete Bundle - ⭐{STAR_PRICE * 10}", callback_data="get_all")],
         [InlineKeyboardButton("📂 Browse Templates", callback_data="show_files")],
         [InlineKeyboardButton("ℹ️ Why Clean Templates?", callback_data="why_clean")],
@@ -520,12 +578,21 @@ Happy coding! 🚀
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # Command handlers
     app.add_handler(CommandHandler("start", start))
+    
+    # Web App data handler - مهم جداً!
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data))
+    
+    # Callback query handler
     app.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Payment handlers
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     
     logger.info("🚀 Clean Code Templates Bot started!")
+    logger.info(f"📱 Web App URL: {WEB_APP_URL}")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
