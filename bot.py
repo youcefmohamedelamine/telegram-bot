@@ -1,25 +1,26 @@
 import logging
 import os
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 from flask import Flask, render_template_string, request, jsonify
 import threading
-import json
 from database import db
+from dotenv import load_dotenv
 
-# إعدادات البوت
+load_dotenv()
+
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://winterlandbot-production.up.railway.app")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:5000")
 PORT = int(os.getenv("PORT", 5000))
+ADMIN_IDS = [123456789]  # ضع معرفك هنا
 
-# إعداد السجلات
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Flask للواجهة الويب
 app = Flask(__name__)
+app.config['JSON_SORT_KEYS'] = False  # تسريع استجابة JSON
 
-# صفحة HTML للويب أب
+# نفس HTML_TEMPLATE من الكود السابق
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -292,14 +293,13 @@ HTML_TEMPLATE = """
         let level = 1;
         let tapPower = 1;
         let userId = null;
-        let saveInterval = null;
+        let lastSaveTime = 0;
+        const SAVE_INTERVAL = 3000; // حفظ كل 3 ثواني
 
-        // تهيئة Telegram WebApp
         let tg = window.Telegram.WebApp;
         tg.expand();
         tg.enableClosingConfirmation();
 
-        // الحصول على معلومات المستخدم
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
             let user = tg.initDataUnsafe.user;
             userId = user.id;
@@ -308,11 +308,9 @@ HTML_TEMPLATE = """
                 document.getElementById('avatar').textContent = user.first_name.charAt(0).toUpperCase();
             }
             
-            // تحميل البيانات من الخادم
             loadDataFromServer();
         }
 
-        // تحميل البيانات من الخادم
         async function loadDataFromServer() {
             try {
                 const response = await fetch('/api/user/' + userId);
@@ -330,9 +328,10 @@ HTML_TEMPLATE = """
             }
         }
 
-        // حفظ البيانات على الخادم
         async function saveDataToServer() {
-            if (!userId) return;
+            if (!userId || Date.now() - lastSaveTime < SAVE_INTERVAL) return;
+            
+            lastSaveTime = Date.now();
             
             try {
                 await fetch('/api/save', {
@@ -354,7 +353,7 @@ HTML_TEMPLATE = """
 
         function tap() {
             if (energy < tapPower) {
-                tg.showAlert('⚠️ ليس لديك طاقة كافية! انتظر قليلاً...');
+                tg.showAlert('⚠️ ليس لديك طاقة كافية!');
                 return;
             }
 
@@ -365,13 +364,12 @@ HTML_TEMPLATE = """
             updateDisplay();
             createFloatingCoin(event);
 
-            // ترقية المستوى
             if (balance >= level * 100) {
                 level++;
                 tapPower++;
                 tg.showPopup({
                     title: '🎉 تهانينا!',
-                    message: `وصلت للمستوى ${level}! قوة النقر الآن: ${tapPower}`,
+                    message: `وصلت للمستوى ${level}! قوة النقر: ${tapPower}`,
                     buttons: [{type: 'ok'}]
                 });
             }
@@ -400,7 +398,6 @@ HTML_TEMPLATE = """
             setTimeout(() => coin.remove(), 1000);
         }
 
-        // استعادة الطاقة تلقائياً
         setInterval(() => {
             if (energy < maxEnergy) {
                 energy = Math.min(energy + 1, maxEnergy);
@@ -408,12 +405,8 @@ HTML_TEMPLATE = """
             }
         }, 1000);
 
-        // حفظ البيانات كل 5 ثواني
-        setInterval(() => {
-            saveDataToServer();
-        }, 5000);
+        setInterval(() => saveDataToServer(), SAVE_INTERVAL);
 
-        // حفظ عند إغلاق الصفحة
         window.addEventListener('beforeunload', () => {
             saveDataToServer();
         });
@@ -421,7 +414,7 @@ HTML_TEMPLATE = """
         function showTasks() {
             tg.showPopup({
                 title: '📋 المهام اليومية',
-                message: '• انقر 100 مرة: +500 💎\n• ادعُ 3 أصدقاء: +1000 💎\n• افتح التطبيق 7 أيام: +5000 💎',
+                message: '• انقر 100 مرة: +500 💎\\n• ادعُ 3 أصدقاء: +1000 💎\\n• افتح التطبيق 7 أيام: +5000 💎',
                 buttons: [{type: 'ok'}]
             });
         }
@@ -429,7 +422,7 @@ HTML_TEMPLATE = """
         function showFriends() {
             tg.showPopup({
                 title: '👥 ادعُ أصدقائك',
-                message: 'احصل على 500 💎 عن كل صديق يشترك!\n\nشارك رابط الدعوة مع أصدقائك.',
+                message: 'احصل على 500 💎 عن كل صديق يشترك!',
                 buttons: [
                     {type: 'default', text: 'مشاركة'},
                     {type: 'cancel'}
@@ -447,13 +440,17 @@ HTML_TEMPLATE = """
 def webapp():
     return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/user/<int:user_id>')
+@app.route('/api/user/<int:user_id>', methods=['GET'])
 def get_user_data(user_id):
     """API للحصول على بيانات المستخدم"""
-    user = db.get_user(user_id)
-    if user:
-        return jsonify(user)
-    return jsonify({'error': 'User not found'}), 404
+    try:
+        user = db.get_user(user_id)
+        if user:
+            return jsonify(user), 200
+        return jsonify({'error': 'User not found'}), 404
+    except Exception as e:
+        logger.error(f"خطأ في جلب البيانات: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/save', methods=['POST'])
 def save_game_data():
@@ -462,6 +459,7 @@ def save_game_data():
         data = request.json
         user_id = data.get('user_id')
         
+        # عدم حفظ إذا كانت القيم null
         db.update_game_data(
             user_id=user_id,
             balance=data.get('balance'),
@@ -471,23 +469,26 @@ def save_game_data():
             tap_power=data.get('tap_power')
         )
         
-        return jsonify({'success': True})
+        return jsonify({'success': True}), 200
     except Exception as e:
         logger.error(f"خطأ في حفظ البيانات: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/leaderboard')
+@app.route('/api/leaderboard', methods=['GET'])
 def leaderboard():
     """API للحصول على المتصدرين"""
-    leaders = db.get_leaderboard(limit=10)
-    return jsonify(leaders)
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        leaders = db.get_leaderboard(limit=min(limit, 100))
+        return jsonify(leaders), 200
+    except Exception as e:
+        logger.error(f"خطأ في جلب المتصدرين: {e}")
+        return jsonify({'error': str(e)}), 500
 
-# دوال البوت
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """رسالة الترحيب مع زر فتح التطبيق"""
+    """رسالة الترحيب"""
     user = update.effective_user
     
-    # حفظ/تحديث بيانات المستخدم في قاعدة البيانات
     invited_by = context.args[0] if context.args else None
     db.create_or_update_user(
         user_id=user.id,
@@ -511,7 +512,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• نظام المستويات\n"
         "• مهام يومية\n"
         "• دعوة الأصدقاء\n\n"
-        f"🔗 رابط الدعوة الخاص بك:\n"
+        f"🔗 رابط الدعوة:\n"
         f"https://t.me/YOUR_BOT_USERNAME?start={user.id}"
     )
     
@@ -579,9 +580,7 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(leaderboard_text)
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إحصائيات للمشرفين (ضع معرف المشرف هنا)"""
-    ADMIN_IDS = [123456789]  # ضع معرفك هنا
-    
+    """إحصائيات للمشرفين"""
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("⛔ هذا الأمر للمشرفين فقط!")
         return
@@ -590,13 +589,10 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     all_users = db.get_all_users()
     
     total_balance = sum(user['balance'] for user in all_users)
-    active_today = sum(1 for user in all_users 
-                      if user['last_active'].date() == datetime.now().date())
     
     stats_text = (
         "👑 إحصائيات المشرف:\n\n"
         f"👥 إجمالي المستخدمين: {total_users}\n"
-        f"✅ نشط اليوم: {active_today}\n"
         f"💎 إجمالي العملات: {total_balance:,}\n"
     )
     
@@ -604,8 +600,6 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """إرسال رسالة جماعية (للمشرفين فقط)"""
-    ADMIN_IDS = [123456789]  # ضع معرفك هنا
-    
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("⛔ هذا الأمر للمشرفين فقط!")
         return
@@ -632,7 +626,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success += 1
         except Exception as e:
             failed += 1
-            logger.error(f"فشل إرسال الرسالة إلى {user['user_id']}: {e}")
+            logger.error(f"فشل الإرسال إلى {user['user_id']}: {e}")
     
     await update.message.reply_text(
         f"✅ تم إرسال الرسالة\n\n"
@@ -642,13 +636,14 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def run_flask():
     """تشغيل خادم Flask"""
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
 
 def main():
     """تشغيل البوت"""
     # تشغيل Flask في خيط منفصل
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
+    logger.info(f"🌐 خادم الويب يعمل على http://0.0.0.0:{PORT}")
     
     # إنشاء التطبيق
     application = Application.builder().token(BOT_TOKEN).build()
@@ -663,7 +658,7 @@ def main():
     
     # بدء البوت
     logger.info("🚀 البوت يعمل الآن...")
-    logger.info(f"📊 عدد المستخدمين في قاعدة البيانات: {db.get_user_count()}")
+    logger.info(f"📊 عدد المستخدمين: {db.get_user_count()}")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
